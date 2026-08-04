@@ -36,8 +36,8 @@ test('resolveTaskId throws when the code is not found and exposes the uppercased
     return new Response('{"tasks":[]}');
   });
 
-  await assert.rejects(() => client.resolveTaskId('lp-129'), /Task code 'lp-129' not found/);
-  assert.match(requestedUrl, /code%3DLP-129/);
+  await assert.rejects(() => client.resolveTaskId('abc-99'), /Task code 'abc-99' not found/);
+  assert.match(requestedUrl, /code%3DABC-99/);
 });
 
 test('resolveTaskId rejects a malformed code format', async () => {
