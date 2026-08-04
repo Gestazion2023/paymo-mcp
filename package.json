@@ -1,0 +1,39 @@
+{
+  "name": "paymo-mcp",
+  "version": "0.1.0",
+  "description": "Unofficial MCP server for the Paymo time-tracking API",
+  "license": "MIT",
+  "author": "Gestazión <developers@gestazion.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gestazion/paymo-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gestazion/paymo-mcp/issues"
+  },
+  "homepage": "https://github.com/gestazion/paymo-mcp#readme",
+  "type": "module",
+  "bin": {
+    "paymo-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test --experimental-strip-types test/",
+    "postbuild": "chmod +x dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
