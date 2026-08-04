@@ -228,7 +228,7 @@ export class PaymoClient {
     if (options.form !== undefined) {
       headers['Content-Type'] = 'application/x-www-form-urlencoded';
       body = new URLSearchParams(
-        Object.entries(options.form).map(([key, value]) => [key, String(value)]),
+        Object.entries(options.form).map(([key, value]) => [key, String(value)] as [string, string]),
       ).toString();
     } else if (options.body !== undefined) {
       headers['Content-Type'] = 'application/json';
