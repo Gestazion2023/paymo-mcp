@@ -48,7 +48,7 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
     },
     () => respond('get me', async () => {
       const payload = await ctx.client.me();
-      return (payload.users as PaymoRecord[] | undefined)?.[0] ?? [];
+      return (payload.users as PaymoRecord[] | undefined)?.[0] ?? null;
     }),
   );
 

@@ -204,11 +204,6 @@ export class PaymoClient {
     return entry;
   }
 
-  taskUrl(projectId: number, taskId: number): string {
-    const webBaseUrl = this.baseUrl.replace(/\/api\/?$/, '');
-    return `${webBaseUrl}/#/Paymo.Projects/${projectId}/tasks/complex/task/${taskId}`;
-  }
-
   private nowUtc(): string {
     return `${new Date().toISOString().slice(0, 19)}Z`;
   }
