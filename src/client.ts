@@ -28,7 +28,12 @@ export interface PaymoClientOptions {
   apiKey: string;
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
+  sleep?: (ms: number) => Promise<void>;
 }
+
+/** Upper bound on how long a 429 is allowed to stall a tool call. */
+const MAX_RETRY_DELAY_MS = 60_000;
+const DEFAULT_RETRY_DELAY_MS = 5_000;
 
 interface RequestOptions {
   body?: PaymoRecord;
@@ -39,8 +44,16 @@ export class PaymoClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof globalThis.fetch;
+  private readonly sleep: (ms: number) => Promise<void>;
 
-  constructor({ apiKey, baseUrl, fetch: fetchImpl = globalThis.fetch }: PaymoClientOptions) {
+  constructor({
+    apiKey,
+    baseUrl,
+    fetch: fetchImpl = globalThis.fetch,
+    sleep = (ms: number): Promise<void> => new Promise((resolve): void => {
+      setTimeout(resolve, ms);
+    }),
+  }: PaymoClientOptions) {
     if (apiKey === '') {
       throw new Error('PAYMO_API_KEY is not configured.');
     }
@@ -48,6 +61,7 @@ export class PaymoClient {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.fetchImpl = fetchImpl;
+    this.sleep = sleep;
   }
 
   async me(): Promise<PaymoRecord> {
@@ -224,7 +238,27 @@ export class PaymoClient {
     return new URLSearchParams(params).toString();
   }
 
-  private async request(method: string, path: string, options: RequestOptions = {}): Promise<PaymoRecord> {
+  async deleteEntry(entryId: number): Promise<void> {
+    await this.request('DELETE', `/entries/${entryId}`);
+  }
+
+  /**
+   * Paymo advertises the window it wants us to wait through `X-Ratelimit-Decay-Period`,
+   * so honour that rather than guessing a backoff curve.
+   */
+  private retryDelayMs(response: Response): number {
+    const seconds = Number(response.headers.get('x-ratelimit-decay-period'));
+    const delay = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : DEFAULT_RETRY_DELAY_MS;
+
+    return Math.min(delay, MAX_RETRY_DELAY_MS);
+  }
+
+  private async request(
+    method: string,
+    path: string,
+    options: RequestOptions = {},
+    isRetry = false,
+  ): Promise<PaymoRecord> {
     const headers: Record<string, string> = {
       Authorization: `Basic ${Buffer.from(`${this.apiKey}:X`).toString('base64')}`,
       Accept: 'application/json',
@@ -256,6 +290,12 @@ export class PaymoClient {
       });
     } finally {
       clearTimeout(timeout);
+    }
+
+    if (response.status === 429 && !isRetry) {
+      await this.sleep(this.retryDelayMs(response));
+
+      return this.request(method, path, options, true);
     }
 
     if (!response.ok) {

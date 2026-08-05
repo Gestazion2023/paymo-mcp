@@ -126,3 +126,75 @@ test('PaymoHttpError leaves a short json body intact', () => {
 
   assert.equal(err.message, 'Paymo API returned 429: {"message":"Too Many Requests"}');
 });
+
+function makeRetryingClient(
+  handler: (url: string, init?: RequestInit) => Response,
+  slept: number[],
+): PaymoClient {
+  return new PaymoClient({
+    apiKey: 'test-key',
+    baseUrl: 'https://app.paymoapp.com/api',
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) =>
+      handler(String(input), init)) as unknown as typeof fetch,
+    sleep: async (ms: number) => {
+      slept.push(ms);
+    },
+  });
+}
+
+test('a 429 is retried once, waiting the decay period Paymo advertises', async () => {
+  const slept: number[] = [];
+  let calls = 0;
+  const client = makeRetryingClient(() => {
+    calls += 1;
+
+    return calls === 1
+      ? new Response('{"message":"Too Many Requests"}', {
+        status: 429,
+        headers: { 'X-Ratelimit-Decay-Period': '30' },
+      })
+      : new Response('{"tasks":[{"id":1}]}');
+  }, slept);
+
+  assert.deepEqual(await client.task(1), { id: 1 });
+  assert.equal(calls, 2);
+  assert.deepEqual(slept, [30_000]);
+});
+
+test('a 429 without a usable decay header falls back to a default wait', async () => {
+  const slept: number[] = [];
+  const client = makeRetryingClient(
+    () => new Response('{"message":"Too Many Requests"}', { status: 429 }),
+    slept,
+  );
+
+  await assert.rejects(() => client.task(1), PaymoHttpError);
+  assert.deepEqual(slept, [5_000]);
+});
+
+test('the retry wait is capped so a tool call cannot stall indefinitely', async () => {
+  const slept: number[] = [];
+  const client = makeRetryingClient(
+    () => new Response('nope', { status: 429, headers: { 'X-Ratelimit-Decay-Period': '86400' } }),
+    slept,
+  );
+
+  await assert.rejects(() => client.task(1), PaymoHttpError);
+  assert.deepEqual(slept, [60_000]);
+});
+
+test('deleteEntry issues a DELETE and tolerates an empty body', async () => {
+  let seen: { url: string; method?: string } | null = null;
+  const client = makeClient((url, init) => {
+    seen = { url, method: init?.method };
+
+    return new Response(null, { status: 204 });
+  });
+
+  await client.deleteEntry(77);
+
+  assert.deepEqual(seen, {
+    url: 'https://app.paymoapp.com/api/entries/77',
+    method: 'DELETE',
+  });
+});
