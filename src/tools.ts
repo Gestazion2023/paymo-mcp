@@ -22,6 +22,8 @@ const statusArg = z
   .string()
   .describe('Numeric workflow status id or a slug alias (e.g. in_progress).');
 
+const PRIORITY = 'Priority: 100 critical, 75 high, 50 normal, 25 low. Paymo only uses these four.';
+
 const RICH_TEXT =
   'Paymo renders HTML here (p, b, i, u, s, ul, ol, li, h2, blockquote, a, br, code, pre, span) '
   + 'and strips anything else. Markdown is not rendered: use tags, not ** or backticks.';
@@ -158,7 +160,7 @@ function registerWriteTools(server: McpServer, c: ToolsContext): void {
     'paymo_create_task',
     {
       description:
-        'Create a new Paymo task. Requires a name and either a project_id or a tasklist_id. Optional: description, due_date (YYYY-MM-DD), priority (50 normal), users (list of user ids).',
+        'Create a new Paymo task. Requires a name and either a project_id or a tasklist_id. Optional: description, due_date (YYYY-MM-DD), priority (100/75/50/25), users (list of user ids).',
       inputSchema: {
         name: z.string().max(255).describe('Task title.'),
         project_id: z.number().int().optional().describe('Required if tasklist_id is not given.'),
@@ -172,7 +174,7 @@ function registerWriteTools(server: McpServer, c: ToolsContext): void {
           .optional()
           .describe(`Optional task description. ${RICH_TEXT}`),
         due_date: z.string().optional().describe('Optional due date in YYYY-MM-DD format.'),
-        priority: z.number().int().optional().describe('Optional priority (50 = normal).'),
+        priority: z.number().int().optional().describe(`Optional ${PRIORITY}`),
         users: z.array(z.number().int()).optional().describe('Optional assignees (Paymo user ids).'),
       },
     },
@@ -202,15 +204,17 @@ function registerWriteTools(server: McpServer, c: ToolsContext): void {
     'paymo_update_task',
     {
       description:
-        'Update a Paymo task. status accepts a numeric id or a slug alias (e.g. in_progress); complete toggles completion.',
+        'Update a Paymo task. status accepts a numeric id or a slug alias (e.g. in_progress). '
+        + 'Do not send complete and status together: Paymo forces the status to Complete when '
+        + 'completing and to Backlog when reopening, so the status argument would be overwritten.',
       inputSchema: {
         task: taskIdentifier,
         name: z.string().optional().describe('New title.'),
         description: z.string().optional().describe(`New description. ${RICH_TEXT}`),
         due_date: z.string().optional().describe('Due date in YYYY-MM-DD format.'),
-        priority: z.number().int().optional().describe('Priority (50 = normal).'),
+        priority: z.number().int().optional().describe(`${PRIORITY}`),
         users: z.array(z.number().int()).optional().describe('Assignees (Paymo user ids).'),
-        complete: z.boolean().optional().describe('Mark complete (true) or reopen (false).'),
+        complete: z.boolean().optional().describe('Mark complete (true) or reopen (false). Also resets status, so do not pass status too.'),
         status: statusArg.optional().describe('Workflow status id or alias.'),
       },
     },
@@ -274,9 +278,31 @@ function registerWriteTools(server: McpServer, c: ToolsContext): void {
   );
 
   server.registerTool(
+    'paymo_delete_entry',
+    {
+      description:
+        'Delete a Paymo time entry by id. Needed to discard a timer that ran for less than a '
+        + 'minute: Paymo refuses to set an end_time that would make the entry shorter than that, '
+        + 'so such a timer can only be closed by deleting it. Use paymo_timer_status to get the id.',
+      inputSchema: {
+        entry_id: z.number().int().describe('Numeric id of the time entry to delete.'),
+      },
+    },
+    (args) =>
+      respond('delete entry', async () => {
+        await c.client.deleteEntry(args.entry_id);
+
+        return { deleted: args.entry_id };
+      }),
+  );
+
+  server.registerTool(
     'paymo_stop_timer',
     {
-      description: 'Stop the running Paymo time entry of the authenticated user. No-op if none is active.',
+      description:
+        'Stop the running Paymo time entry of the authenticated user. No-op if none is active. '
+        + 'If the entry is under a minute old Paymo may refuse the stop; delete it with '
+        + 'paymo_delete_entry instead.',
     },
     () =>
       respond('stop timer', async () => {

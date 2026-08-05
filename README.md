@@ -84,6 +84,18 @@ accident with a write tool is much harder to undo than a wrong read.
 | `paymo_add_comment` | `task` (req), `content` (req) | `POST /comments` |
 | `paymo_start_timer` | `task` (req) | `POST /entries` |
 | `paymo_stop_timer` | — | `PUT /entries/{id}` |
+| `paymo_delete_entry` | `entry_id` (req) | `DELETE /entries/{id}` |
+
+A timer that ran for under a minute cannot be stopped: Paymo rejects an `end_time` that would make
+the entry shorter than that. Delete it with `paymo_delete_entry` instead — that is the documented
+way out, and the only reason this package ships a delete tool at all.
+
+### Rate limiting
+
+Paymo answers a 429 with `X-Ratelimit-Decay-Period`, and a request that hits one is retried once
+after waiting exactly that long (capped at 60s) before the error surfaces. Bursts still hurt: a
+single tool call can cost two or three requests, since resolving a task code and the current user
+are separate lookups.
 
 Where a `task` is expected, pass either a numeric **id** or a human **task code** (e.g. `ABC-1`).
 Where a `status` is expected, pass a numeric id or a slug alias such as `in_progress`; aliases are

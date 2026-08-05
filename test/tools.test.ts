@@ -83,6 +83,7 @@ test('read-only mode registers the read tools only', () => {
   const readWrite = handlersFor({}, false);
 
   assert.equal(readOnly.size, 7);
-  assert.equal(readWrite.size, 12);
+  assert.equal(readWrite.size, 13);
   assert.equal(readOnly.has('paymo_update_task'), false);
+  assert.equal(readOnly.has('paymo_delete_entry'), false);
 });
