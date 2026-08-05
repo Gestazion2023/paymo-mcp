@@ -89,6 +89,17 @@ Where a `task` is expected, pass either a numeric **id** or a human **task code*
 Where a `status` is expected, pass a numeric id or a slug alias such as `in_progress`; aliases are
 discovered from your workflow, overridable with `PAYMO_STATUS_ALIASES`.
 
+### Rich text
+
+Task descriptions and comments accept HTML. Paymo keeps `p`, `b`, `i`, `u`, `s`, `ul`, `ol`, `li`,
+`h2`, `blockquote`, `a`, `br`, `code`, `pre` and `span` (including inline `style`), adds
+`rel="noopener noreferrer"` to links, and strips everything else — `<script>` included. Markdown is
+**not** rendered: `**bold**` stays literal and backticks come back HTML-escaped, so use tags.
+
+Note that a WAF sits in front of the Paymo API and can reject a request whose body merely *looks*
+dangerous. Posting a comment containing `<script>` returns a 403 HTML page rather than a Paymo
+error, even though Paymo itself would have stripped the tag.
+
 ## Development
 
 ```sh

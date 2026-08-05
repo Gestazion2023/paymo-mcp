@@ -22,6 +22,10 @@ const statusArg = z
   .string()
   .describe('Numeric workflow status id or a slug alias (e.g. in_progress).');
 
+const RICH_TEXT =
+  'Paymo renders HTML here (p, b, i, u, s, ul, ol, li, h2, blockquote, a, br, code, pre, span) '
+  + 'and strips anything else. Markdown is not rendered: use tags, not ** or backticks.';
+
 export async function respond(context: string, fn: () => Promise<unknown>): Promise<CallToolResult> {
   try {
     const result = await fn();
@@ -163,7 +167,10 @@ function registerWriteTools(server: McpServer, c: ToolsContext): void {
           .int()
           .optional()
           .describe('Paymo tasklist (column) id. Required if project_id is not given.'),
-        description: z.string().optional().describe('Optional task description (HTML allowed).'),
+        description: z
+          .string()
+          .optional()
+          .describe(`Optional task description. ${RICH_TEXT}`),
         due_date: z.string().optional().describe('Optional due date in YYYY-MM-DD format.'),
         priority: z.number().int().optional().describe('Optional priority (50 = normal).'),
         users: z.array(z.number().int()).optional().describe('Optional assignees (Paymo user ids).'),
@@ -199,7 +206,7 @@ function registerWriteTools(server: McpServer, c: ToolsContext): void {
       inputSchema: {
         task: taskIdentifier,
         name: z.string().optional().describe('New title.'),
-        description: z.string().optional().describe('New description (HTML allowed).'),
+        description: z.string().optional().describe(`New description. ${RICH_TEXT}`),
         due_date: z.string().optional().describe('Due date in YYYY-MM-DD format.'),
         priority: z.number().int().optional().describe('Priority (50 = normal).'),
         users: z.array(z.number().int()).optional().describe('Assignees (Paymo user ids).'),
@@ -234,7 +241,7 @@ function registerWriteTools(server: McpServer, c: ToolsContext): void {
       description: 'Add a comment to a Paymo task.',
       inputSchema: {
         task: taskIdentifier,
-        content: z.string().describe('Comment text (HTML allowed).'),
+        content: z.string().describe(`Comment text. ${RICH_TEXT}`),
       },
     },
     (args) =>

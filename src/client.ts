@@ -1,11 +1,23 @@
 export type PaymoRecord = Record<string, unknown>;
 
+const MAX_ERROR_BODY = 400;
+
+/**
+ * The body is truncated because it reaches an LLM context verbatim: an API error is a
+ * short JSON document, but a WAF or proxy in front of Paymo answers with a full HTML
+ * page, and a few kilobytes of markup crowd out the conversation for no diagnostic gain.
+ */
 export class PaymoHttpError extends Error {
   readonly status: number;
   readonly body: string;
 
   constructor(status: number, body: string) {
-    super(`Paymo API returned ${status}: ${body}`);
+    const collapsed = body.replace(/\s+/g, ' ').trim();
+    const summary = collapsed.length > MAX_ERROR_BODY
+      ? `${collapsed.slice(0, MAX_ERROR_BODY)}… (${collapsed.length} chars truncated)`
+      : collapsed;
+
+    super(`Paymo API returned ${status}: ${summary}`);
     this.name = 'PaymoHttpError';
     this.status = status;
     this.body = body;

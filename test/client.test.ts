@@ -111,3 +111,18 @@ test('a non-2xx response throws PaymoHttpError carrying status and body', async 
   assert.equal(err.status, 401);
   assert.match(err.message, /unauthorized/);
 });
+test('PaymoHttpError keeps the full body but truncates the message an LLM sees', () => {
+  const html = `<!DOCTYPE html>\n<html>${'<div>blocked</div>'.repeat(500)}</html>`;
+  const err = new PaymoHttpError(403, html);
+
+  assert.equal(err.body, html);
+  assert.ok(err.message.length < 500, `message was ${err.message.length} chars`);
+  assert.match(err.message, /^Paymo API returned 403: /);
+  assert.match(err.message, /chars truncated\)$/);
+});
+
+test('PaymoHttpError leaves a short json body intact', () => {
+  const err = new PaymoHttpError(429, '{"message":"Too Many Requests"}');
+
+  assert.equal(err.message, 'Paymo API returned 429: {"message":"Too Many Requests"}');
+});
