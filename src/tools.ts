@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { PaymoClient, PaymoRecord } from './client.ts';
+import { filterRecord, paginate } from './fields.ts';
 import { StatusResolver } from './statuses.ts';
 
 export interface ToolsContext {
@@ -28,6 +29,26 @@ const RICH_TEXT =
   'Paymo renders HTML here (p, b, i, u, s, ul, ol, li, h2, blockquote, a, br, code, pre, span) '
   + 'and strips anything else. Markdown is not rendered: use tags, not ** or backticks.';
 
+const limit = z
+  .number()
+  .int()
+  .min(1)
+  .optional()
+  .describe('Maximum number of records to return. Omit to return the full list.');
+const offset = z
+  .number()
+  .int()
+  .min(0)
+  .default(0)
+  .describe('Number of records to skip before returning, for paging past the first page.');
+const verbose = z
+  .boolean()
+  .default(false)
+  .describe(
+    'When false (default) only the documented field subset is returned. Set true to return '
+    + 'every field Paymo provides for each record.',
+  );
+
 export async function respond(context: string, fn: () => Promise<unknown>): Promise<CallToolResult> {
   try {
     const result = await fn();
@@ -51,25 +72,36 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
     {
       description:
         'Returns the authenticated Paymo user (id, name, email, timezone, workflows, assigned projects).',
+      inputSchema: { verbose },
     },
-    () => respond('get me', async () => {
+    (args) => respond('get me', async () => {
       const payload = await ctx.client.me();
-      return (payload.users as PaymoRecord[] | undefined)?.[0] ?? null;
+      const user = (payload.users as PaymoRecord[] | undefined)?.[0] ?? null;
+
+      return user === null ? null : filterRecord(user, 'user', args.verbose);
     }),
   );
 
   server.registerTool(
     'paymo_list_projects',
     {
-      description: 'List Paymo projects the user has access to.',
+      description: 'List Paymo projects the user has access to, with the documented field subset.',
       inputSchema: {
         active: z
           .boolean()
           .default(true)
           .describe('When true (default) only active projects are returned.'),
+        limit,
+        offset,
+        verbose,
       },
     },
-    (args) => respond('list projects', () => ctx.client.projects(args.active)),
+    (args) => respond('list projects', async () => {
+      const records = await ctx.client.projects(args.active);
+      const filtered = records.map((record) => filterRecord(record, 'project', args.verbose));
+
+      return paginate(filtered, args.limit, args.offset);
+    }),
   );
 
   server.registerTool(
@@ -78,9 +110,17 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
       description: 'List tasklists (columns) for a project, or across all tasks when unset.',
       inputSchema: {
         project_id: z.number().int().optional().describe('Restrict to a single project.'),
+        limit,
+        offset,
+        verbose,
       },
     },
-    (args) => respond('list tasklists', () => ctx.client.tasklists(args.project_id ?? null)),
+    (args) => respond('list tasklists', async () => {
+      const records = await ctx.client.tasklists(args.project_id ?? null);
+      const filtered = records.map((record) => filterRecord(record, 'tasklist', args.verbose));
+
+      return paginate(filtered, args.limit, args.offset);
+    }),
   );
 
   server.registerTool(
@@ -93,6 +133,9 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
           .boolean()
           .default(false)
           .describe('When true, include completed tasks. Defaults to false.'),
+        limit,
+        offset,
+        verbose,
       },
     },
     (args) =>
@@ -109,7 +152,10 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
           targetProjectId = ctx.defaultProjectId;
         }
 
-        return ctx.client.tasks(targetProjectId, !args.include_completed);
+        const records = await ctx.client.tasks(targetProjectId, !args.include_completed);
+        const filtered = records.map((record) => filterRecord(record, 'task', args.verbose));
+
+        return paginate(filtered, args.limit, args.offset);
       }),
   );
 
@@ -117,12 +163,14 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
     'paymo_get_task',
     {
       description: 'Fetch a Paymo task by numeric id or human code.',
-      inputSchema: { task: taskIdentifier },
+      inputSchema: { task: taskIdentifier, verbose },
     },
     (args) =>
       respond('get task', async () => {
         const id = await ctx.client.resolveTaskId(args.task);
-        return ctx.client.task(id);
+        const task = await ctx.client.task(id);
+
+        return filterRecord(task, 'task', args.verbose);
       }),
   );
 
@@ -131,8 +179,14 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
     {
       description:
         'List the workflow statuses available in Paymo (id, name, seq, action) — useful to map status_id to a human name.',
+      inputSchema: { limit, offset, verbose },
     },
-    () => respond('workflow statuses', () => ctx.client.workflowStatuses()),
+    (args) => respond('workflow statuses', async () => {
+      const records = await ctx.client.workflowStatuses();
+      const filtered = records.map((record) => filterRecord(record, 'workflowstatus', args.verbose));
+
+      return paginate(filtered, args.limit, args.offset);
+    }),
   );
 
   server.registerTool(
@@ -140,13 +194,16 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
     {
       description:
         "Returns the running Paymo time entry for the authenticated user, or null if no timer is active.",
+      inputSchema: { verbose },
     },
-    () =>
+    (args) =>
       respond('timer status', async () => {
         const userId = await ctx.client.currentUserId();
         const entry = await ctx.client.runningEntry(userId);
 
-        return { running: entry };
+        return {
+          running: entry === null ? null : filterRecord(entry, 'entry', args.verbose),
+        };
       }),
   );
 

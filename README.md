@@ -67,13 +67,13 @@ accident with a write tool is much harder to undo than a wrong read.
 
 | Tool | Args | Endpoint |
 |---|---|---|
-| `paymo_me` | — | `GET /me` |
-| `paymo_list_projects` | `active?: boolean` (default true) | `GET /projects` |
-| `paymo_list_tasklists` | `project_id?: number` | `GET /tasklists?where=project_id=…` |
-| `paymo_list_tasks` | `project_id?: number`, `include_completed?: boolean` | `GET /tasks?where=…` |
-| `paymo_get_task` | `task: string` (id or code) | `GET /tasks/{id}` |
-| `paymo_list_workflow_statuses` | — | `GET /workflowstatuses` |
-| `paymo_timer_status` | — | `GET /entries?where=end_time=null and user_id={me}` |
+| `paymo_me` | `verbose?` | `GET /me` |
+| `paymo_list_projects` | `active?: boolean` (default true), `limit?`, `offset?`, `verbose?` | `GET /projects` |
+| `paymo_list_tasklists` | `project_id?: number`, `limit?`, `offset?`, `verbose?` | `GET /tasklists?where=project_id=…` |
+| `paymo_list_tasks` | `project_id?: number`, `include_completed?: boolean`, `limit?`, `offset?`, `verbose?` | `GET /tasks?where=…` |
+| `paymo_get_task` | `task: string` (id or code), `verbose?` | `GET /tasks/{id}` |
+| `paymo_list_workflow_statuses` | `limit?`, `offset?`, `verbose?` | `GET /workflowstatuses` |
+| `paymo_timer_status` | `verbose?` | `GET /entries?where=end_time=null and user_id={me}` |
 
 **Write (skipped when `PAYMO_READ_ONLY=true`)**
 
@@ -89,6 +89,14 @@ accident with a write tool is much harder to undo than a wrong read.
 A timer that ran for under a minute cannot be stopped: Paymo rejects an `end_time` that would make
 the entry shorter than that. Delete it with `paymo_delete_entry` instead — that is the documented
 way out, and the only reason this package ships a delete tool at all.
+
+### Response size
+
+Paymo answers with 20–40 fields per record; a project listing comes back several times larger than
+the whole tool catalogue. The list and detail tools therefore return a **documented field subset** —
+an agent needs `id`, `name`, `code`, not `flat_billing` or `cover_file_id`. List tools also take
+`limit` and `offset` for paging. Pass `verbose: true` to any read tool when you genuinely need every
+field Paymo provides.
 
 ### Rate limiting
 

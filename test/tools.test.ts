@@ -87,3 +87,65 @@ test('read-only mode registers the read tools only', () => {
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
 });
+
+test('paymo_list_projects applies the field subset and honors limit and offset', async () => {
+  const handlers = handlersFor({
+    projects: async () => [
+      { id: 1234, name: 'Alpha', code: 'A', flat_billing: true, color: '#fff' },
+      { id: 5678, name: 'Beta', code: 'B', flat_billing: false, color: '#000' },
+      { id: 9012, name: 'Gamma', code: 'C', budget_hours: 40 },
+    ],
+  });
+
+  const result = await handlers.get('paymo_list_projects')!({
+    active: true,
+    limit: 2,
+    offset: 1,
+    verbose: false,
+  });
+
+  assert.deepEqual(payloadOf(result), [
+    { id: 5678, name: 'Beta', code: 'B' },
+    { id: 9012, name: 'Gamma', code: 'C' },
+  ]);
+});
+
+test('list_projects verbose returns each raw project untouched', async () => {
+  const raw = { id: 1234, name: 'Alpha', code: 'A', flat_billing: true, color: '#fff' };
+  const handlers = handlersFor({ projects: async () => [raw] });
+
+  const result = await handlers.get('paymo_list_projects')!({
+    active: true,
+    limit: 5,
+    offset: 0,
+    verbose: true,
+  });
+
+  assert.deepEqual(payloadOf(result), [raw]);
+});
+
+test('timer_status filters the running entry to the documented subset', async () => {
+  const handlers = handlersFor({
+    currentUserId: async () => 9,
+    runningEntry: async () => ({
+      id: 9,
+      task_id: 1234,
+      start_time: '2026-08-05T10:00:00Z',
+      end_time: null,
+      duration: 0,
+      cover_file_id: 999,
+    }),
+  });
+
+  const result = await handlers.get('paymo_timer_status')!({ verbose: false });
+
+  assert.deepEqual(payloadOf(result), {
+    running: {
+      id: 9,
+      task_id: 1234,
+      start_time: '2026-08-05T10:00:00Z',
+      end_time: null,
+      duration: 0,
+    },
+  });
+});
