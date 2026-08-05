@@ -567,7 +567,7 @@ test('get_client returns the client detail subset with the write fields visible'
       id: 1234,
       name: 'Acme',
       country: 'US',
-      fiscal_information: 'VAT-123',
+      fiscal_information: 'VATFIXTURE',
       active: true,
       image: 'http://x/logo.png',
     }),
@@ -579,7 +579,7 @@ test('get_client returns the client detail subset with the write fields visible'
     id: 1234,
     name: 'Acme',
     country: 'US',
-    fiscal_information: 'VAT-123',
+    fiscal_information: 'VATFIXTURE',
     active: true,
   });
 });
@@ -668,7 +668,7 @@ test('create_client forwards every create field', async () => {
     name: 'Acme',
     email: 'sales@acme.com',
     country: 'US',
-    fiscal_information: 'VAT-123',
+    fiscal_information: 'VATFIXTURE',
   });
 
   assert.deepEqual(payloadOf(result), { id: 1 });
@@ -676,7 +676,7 @@ test('create_client forwards every create field', async () => {
     name: 'Acme',
     email: 'sales@acme.com',
     country: 'US',
-    fiscal_information: 'VAT-123',
+    fiscal_information: 'VATFIXTURE',
   });
 });
 
