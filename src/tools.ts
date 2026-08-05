@@ -254,16 +254,15 @@ function registerWriteTools(server: McpServer, c: ToolsContext): void {
     (args) =>
       respond('start timer', async () => {
         const userId = await c.client.currentUserId();
-        const previous = await c.client.runningEntry(userId);
-
-        if (typeof previous?.id === 'number') {
-          await c.client.stopEntry(previous.id);
-        }
+        const running = await c.client.runningEntry(userId);
+        const previousClosed = typeof running?.id === 'number'
+          ? await c.client.stopEntry(running.id)
+          : null;
 
         const taskId = await c.client.resolveTaskId(args.task);
         const entry = await c.client.startEntry(taskId);
 
-        return { started: entry, previous_closed: previous };
+        return { started: entry, previous_closed: previousClosed };
       }),
   );
 
