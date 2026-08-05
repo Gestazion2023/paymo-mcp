@@ -6,7 +6,9 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PaymoClient } from '../src/client.ts';
 import { PaymoHttpError } from '../src/client.ts';
 import { StatusResolver } from '../src/statuses.ts';
-import { registerTools, respond } from '../src/tools.ts';
+import { registerTools } from '../src/tools/index.ts';
+import { TOOLS, TOOLSETS } from '../src/tools/index.ts';
+import { respond } from '../src/tools/shared.ts';
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
@@ -99,6 +101,14 @@ test('read-only mode registers the read tools only', () => {
   assert.equal(readWrite.size, 13);
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
+});
+
+test('every toolset entry names a tool that exists in the registry', () => {
+  for (const [set, names] of Object.entries(TOOLSETS)) {
+    for (const name of names) {
+      assert.ok(TOOLS[name] !== undefined, `toolset '${set}' references unknown tool '${name}'`);
+    }
+  }
 });
 
 test('paymo_list_projects applies the field subset and honors limit and offset', async () => {

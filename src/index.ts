@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { PaymoClient } from './client.ts';
 import { ConfigError, loadConfig } from './config.ts';
 import { StatusResolver } from './statuses.ts';
-import { registerTools } from './tools.ts';
+import { registerTools } from './tools/index.ts';
 
 let config;
 
