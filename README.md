@@ -48,8 +48,12 @@ Environment variables read by `paymo-mcp`:
 | `PAYMO_API_KEY` | yes | — | Paymo API key used with HTTP Basic auth. |
 | `PAYMO_BASE_URL` | no | `https://app.paymoapp.com/api` | API base URL. |
 | `PAYMO_DEFAULT_PROJECT_ID` | no | — | Project used when a project id argument is omitted. |
-| `PAYMO_STATUS_ALIASES` | no | discovered automatically | JSON object overriding status aliases, e.g. `{"wip":123,"done":456}`. |
-| `PAYMO_READ_ONLY` | no | `false` | `true` registers only the read tools. |
+| `PAYMO_STATUS_ALIASES` | no | discovered automatically | JSON object overriding status aliases, e.g. `{"wip":123,"done":456}`. Keys are slugified, values must be positive integers. |
+| `PAYMO_READ_ONLY` | no | `false` | Registers only the read tools. Accepts `1`/`true`/`yes`/`on` and their negatives. |
+
+An unusable value in any of these aborts startup with an error instead of falling back to a default:
+a `PAYMO_READ_ONLY` typo that silently granted write access would be worse than a server that
+refuses to boot.
 
 ## Getting an API key
 
