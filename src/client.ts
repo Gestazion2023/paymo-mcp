@@ -317,6 +317,54 @@ export class PaymoClient {
     return this.update('tasklists', 'tasklists', id, data);
   }
 
+  // --- Clients, client contacts and company ------------------------------
+  async clients(active: boolean): Promise<PaymoRecord[]> {
+    return this.list('clients', 'clients', `active=${active ? 'true' : 'false'}`);
+  }
+
+  async client(id: number): Promise<PaymoRecord> {
+    return this.one('clients', 'clients', id);
+  }
+
+  async createClient(data: PaymoRecord): Promise<PaymoRecord> {
+    return this.create('clients', 'clients', data);
+  }
+
+  async updateClient(id: number, data: PaymoRecord): Promise<PaymoRecord> {
+    return this.update('clients', 'clients', id, data);
+  }
+
+  async clientContacts(clientId: number | null): Promise<PaymoRecord[]> {
+    return this.list(
+      'clientcontacts',
+      'clientcontacts',
+      clientId === null ? undefined : `client_id=${clientId}`,
+    );
+  }
+
+  async createClientContact(data: PaymoRecord): Promise<PaymoRecord> {
+    return this.create('clientcontacts', 'clientcontacts', data);
+  }
+
+  async updateClientContact(id: number, data: PaymoRecord): Promise<PaymoRecord> {
+    return this.update('clientcontacts', 'clientcontacts', id, data);
+  }
+
+  /**
+   * `company` is the one record returned as a single object (`{"company":{…}}`) rather than
+   * wrapped in an array like every other resource, so it cannot ride the generic helpers.
+   */
+  async company(): Promise<PaymoRecord> {
+    const payload = await this.request('GET', '/company');
+    const record = payload.company as PaymoRecord | undefined;
+
+    if (record === undefined) {
+      throw new Error('Paymo did not return a company record.');
+    }
+
+    return record;
+  }
+
   /**
    * Paymo advertises the window it wants us to wait through `X-Ratelimit-Decay-Period`,
    * so honour that rather than guessing a backoff curve.

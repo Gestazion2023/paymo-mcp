@@ -189,3 +189,133 @@ test('project subset exposes budget_hours and billable now that write tools acce
     billable: true,
   });
 });
+
+test('clientSummary is a strict subset of the client detail subset', () => {
+  for (const key of SUBSETS.clientSummary) {
+    assert.ok(SUBSETS.client.includes(key), `clientSummary field '${key}' is not in the client detail subset`);
+  }
+
+  assert.ok(SUBSETS.clientSummary.length < SUBSETS.client.length);
+});
+
+test('client detail subset keeps every field the write tools accept and drops logo images', () => {
+  const record = {
+    id: 1234,
+    name: 'Acme',
+    address: '1 Main St',
+    city: 'NY',
+    state: 'NY',
+    postal_code: '10001',
+    country: 'US',
+    phone: '555',
+    fax: '555',
+    email: 'a@acme.com',
+    website: 'acme.com',
+    fiscal_information: 'VAT-123',
+    active: true,
+    created_on: '2013-06-26T12:07:44Z',
+    updated_on: '2014-08-04T12:12:13Z',
+    image: 'http://x/logo.png',
+    image_thumb_small: 'http://x/thumb.png',
+  };
+
+  assert.deepEqual(filterRecord(record, 'client', false), {
+    id: 1234,
+    name: 'Acme',
+    address: '1 Main St',
+    city: 'NY',
+    state: 'NY',
+    postal_code: '10001',
+    country: 'US',
+    phone: '555',
+    fax: '555',
+    email: 'a@acme.com',
+    website: 'acme.com',
+    fiscal_information: 'VAT-123',
+    active: true,
+    created_on: '2013-06-26T12:07:44Z',
+    updated_on: '2014-08-04T12:12:13Z',
+  });
+});
+
+test('clientContact subset keeps the writable fields, notes included, and drops images and timestamps', () => {
+  const record = {
+    id: 1,
+    client_id: 1234,
+    name: 'Aaron Cooper',
+    email: 'aaron@x.com',
+    mobile: '555',
+    phone: '556',
+    fax: '557',
+    skype: 'aaron.c',
+    position: 'CEO',
+    is_main: true,
+    access: false,
+    notes: 'prefers email',
+    image: 'http://x/contact.jpg',
+    image_thumb_medium: 'http://x/thumb.jpg',
+    created_on: '2013-07-24T11:52:44Z',
+    updated_on: '2014-08-13T13:00:24Z',
+  };
+
+  assert.deepEqual(filterRecord(record, 'clientContact', false), {
+    id: 1,
+    client_id: 1234,
+    name: 'Aaron Cooper',
+    email: 'aaron@x.com',
+    mobile: '555',
+    phone: '556',
+    fax: '557',
+    skype: 'aaron.c',
+    position: 'CEO',
+    is_main: true,
+    access: false,
+    notes: 'prefers email',
+  });
+});
+
+test('company subset keeps the invoicing defaults and drops plan counters and images', () => {
+  const record = {
+    id: 1234,
+    name: 'Gestazion',
+    address: '1 Main St',
+    phone: '555',
+    email: 'dev@gestazion.com',
+    url: 'gestazion.com',
+    country: 'ES',
+    fiscal_information: 'B-123',
+    default_currency: 'EUR',
+    default_price_per_hour: '30',
+    default_tax: '21',
+    default_tax_text: 'IVA',
+    invoice_format: '#INV-[yyyy][mm][dd]-[i]',
+    next_invoice_number: '101',
+    date_format: 'd/m/Y',
+    time_format: 'H:i',
+    timezone: 'Europe/Madrid',
+    account_type: 'commercial',
+    max_users: 4,
+    current_invoices: 0,
+    image: 'http://x/logo.png',
+  };
+
+  assert.deepEqual(filterRecord(record, 'company', false), {
+    id: 1234,
+    name: 'Gestazion',
+    address: '1 Main St',
+    phone: '555',
+    email: 'dev@gestazion.com',
+    url: 'gestazion.com',
+    country: 'ES',
+    fiscal_information: 'B-123',
+    default_currency: 'EUR',
+    default_price_per_hour: '30',
+    default_tax: '21',
+    default_tax_text: 'IVA',
+    invoice_format: '#INV-[yyyy][mm][dd]-[i]',
+    next_invoice_number: '101',
+    date_format: 'd/m/Y',
+    time_format: 'H:i',
+    timezone: 'Europe/Madrid',
+  });
+});

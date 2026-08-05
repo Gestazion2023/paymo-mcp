@@ -68,7 +68,8 @@ guessing which variable won.
 | `tasks` | tasks, tasklists (read), comments, subtasks | 7 | 5,453 |
 | `time` | time entries: timer control, manual logging, deletion | 4 | 795 |
 | `projects` | project CRUD, project templates, project statuses, tasklists (write) — milestones deferred | 9 | 5,794 |
-| `all` | every toolset above | 20 | 13,050 |
+| `clients` | client CRUD (no delete), client contacts, company — portal access included | 8 | 6,136 |
+| `all` | every toolset above | 28 | 19,186 |
 
 `default` = `context` + `tasks` + `time`, which is approximately the surface the package exposed
 before toolsets existed — an existing user upgrading sees no change. Names are additive and
@@ -179,6 +180,10 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_get_project` | `project_id` (req), `verbose?` | `GET /projects/{id}` |
 | `paymo_list_project_templates` | `limit?`, `offset?`, `verbose?` | `GET /projecttemplates` |
 | `paymo_list_project_statuses` | `limit?`, `offset?`, `verbose?` | `GET /projectstatuses` |
+| `paymo_list_clients` | `active?: boolean` (default true), `limit?`, `offset?`, `verbose?` | `GET /clients` |
+| `paymo_get_client` | `client_id` (req), `verbose?` | `GET /clients/{id}` |
+| `paymo_list_client_contacts` | `client_id?: number`, `limit?`, `offset?`, `verbose?` | `GET /clientcontacts?where=client_id=…` |
+| `paymo_get_company` | `verbose?` | `GET /company` |
 
 **Write** — registered under `modify` and `full`.
 
@@ -193,6 +198,10 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_update_project` | `project_id` (req), plus any of `name`, `code`, `client_id`, `description`, `budget_hours`, `billable`, `active`, `status_id` | `PUT /projects/{id}` |
 | `paymo_create_tasklist` | `project_id` (req), `name` (req), `seq?`, `milestone_id?` | `POST /tasklists` |
 | `paymo_update_tasklist` | `tasklist_id` (req), plus any of `name`, `seq`, `milestone_id` | `PUT /tasklists/{id}` |
+| `paymo_create_client` | `name` (req), `email?`, `phone?`, `fax?`, `website?`, `address?`, `city?`, `state?`, `postal_code?`, `country?`, `fiscal_information?` | `POST /clients` |
+| `paymo_update_client` | `client_id` (req), plus any of the create fields or `active` | `PUT /clients/{id}` |
+| `paymo_create_client_contact` | `client_id` (req), `name` (req), `email?`, `mobile?`, `phone?`, `fax?`, `skype?`, `position?`, `is_main?`, `access?`, `password?`, `notes?` | `POST /clientcontacts` |
+| `paymo_update_client_contact` | `contact_id` (req), plus any of `name`, `email`, `mobile`, `phone`, `fax`, `skype`, `position`, `is_main`, `access`, `password`, `notes` | `PUT /clientcontacts/{id}` |
 
 **Delete** — registered under `full` only.
 
@@ -235,6 +244,23 @@ instead with `paymo_update_project` and `active: false`; that is why the tool ac
 are not covered yet: `paymo_update_tasklist` accepts a `milestone_id` created in the Paymo UI.
 Creating a project from a `template_id` may copy the template's tasklists and tasks into the new
 project, and the created project is what comes back.
+
+### Clients
+
+There is no client or client-contact delete tool on purpose: `DELETE /clients/{id}` destroys every
+project, task and time entry attached to the client — cascading, unrecoverable loss of billing data.
+Archive instead with `paymo_update_client` and `active: false`, the same `active`-boolean pattern
+`projects` uses. To reach a person at a client, list contacts with `paymo_list_client_contacts`; to
+know your own billing identity and invoice defaults, read `paymo_get_company`.
+
+Granting a contact access to the client portal is part of updating or creating the contact: send
+`access: true` together with a `password`. `paymo_update_client_contact` with `access: false`
+revokes it.
+
+The client, client-contact, and company writes are **unverified live**: the package's example key is
+an Employee, and Paymo answers admin-level creates (`POST /clients`, `POST /clientcontacts`) with a
+403. The reads are verified against a real account; the writes are covered by stub-client unit tests
+and are slated for the human-run admin verification pass once an administrator key is available.
 
 ### Rich text
 

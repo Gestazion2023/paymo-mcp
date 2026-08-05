@@ -16,7 +16,11 @@ export type RecordKind =
   | 'workflowstatus'
   | 'entry'
   | 'projectTemplate'
-  | 'projectStatus';
+  | 'projectStatus'
+  | 'client'
+  | 'clientSummary'
+  | 'clientContact'
+  | 'company';
 
 export const SUBSETS: Record<RecordKind, readonly string[]> = {
   user: [
@@ -51,6 +55,31 @@ export const SUBSETS: Record<RecordKind, readonly string[]> = {
   ],
   projectTemplate: ['id', 'name', 'description'],
   projectStatus: ['id', 'name', 'seq', 'active'],
+  // The full client subset carries every field the write tools accept (the AGENTS.md rule: a
+  // field paymo_update_client takes must be readable first) plus created/updated timestamps.
+  // Dropped: image and image_thumb_* — logo URLs a model cannot render, presentation only, and
+  // no write tool accepts them.
+  client: [
+    'id', 'name', 'address', 'city', 'state', 'postal_code', 'country', 'phone',
+    'fax', 'email', 'website', 'fiscal_information', 'active', 'created_on', 'updated_on',
+  ],
+  // Same split as projects: a listing is for picking a client to attach to a project or invoice.
+  clientSummary: ['id', 'name', 'email', 'country', 'active'],
+  // Contacts only have a listing here (no detail read), so this doubles as the detail subset and
+  // keeps every field the contact write tools accept — notes included, because it is writable.
+  // Dropped: image/image_thumb_* (presentation) and created_on/updated_on (readonly timestamps).
+  clientContact: [
+    'id', 'client_id', 'name', 'email', 'mobile', 'phone', 'fax', 'skype',
+    'position', 'is_main', 'access', 'notes',
+  ],
+  // Single-record read of the account's own identity and billing defaults; no company write tool,
+  // so this is informational and biased toward what invoicing needs (identity, currency, number
+  // format), dropping plan/subscription counters and presentation fields.
+  company: [
+    'id', 'name', 'address', 'phone', 'email', 'url', 'country', 'fiscal_information',
+    'default_currency', 'default_price_per_hour', 'default_tax', 'default_tax_text',
+    'invoice_format', 'next_invoice_number', 'date_format', 'time_format', 'timezone',
+  ],
 };
 
 /**

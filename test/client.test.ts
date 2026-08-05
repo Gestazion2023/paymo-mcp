@@ -256,3 +256,57 @@ test('generic create throws when the response array is empty', async () => {
 
   await assert.rejects(() => client.create('projects', 'projects', { name: 'a' }), /created projects/);
 });
+
+test('clients builds a where clause for the requested active state', async () => {
+  let url = '';
+  const client = makeClient((u) => {
+    url = u;
+    return new Response('{"clients":[]}');
+  });
+
+  assert.deepEqual(await client.clients(true), []);
+  assert.match(url, /where=active%3Dtrue/);
+});
+
+test('client and the client generics unwrap the plural clients key', async () => {
+  const client = makeClient(() => new Response('{"clients":[{"id":7,"name":"Acme"}]}'));
+
+  assert.deepEqual(await client.client(7), { id: 7, name: 'Acme' });
+  assert.deepEqual(await client.createClient({ name: 'Globex' }), { id: 7, name: 'Acme' });
+  assert.deepEqual(await client.updateClient(7, { active: false }), { id: 7, name: 'Acme' });
+});
+
+test('clientContacts filters by client_id when given and lists all otherwise', async () => {
+  let url = '';
+  const client = makeClient((u) => {
+    url = u;
+    return new Response('{"clientcontacts":[]}');
+  });
+
+  await client.clientContacts(1234);
+  assert.match(url, /where=client_id%3D1234/);
+
+  await client.clientContacts(null);
+  assert.equal(url, 'https://app.paymoapp.com/api/clientcontacts');
+});
+
+test('client contact generics unwrap the clientcontacts key', async () => {
+  const client = makeClient(() => new Response('{"clientcontacts":[{"id":3,"name":"Aaron"}]}'));
+
+  assert.deepEqual(await client.createClientContact({ client_id: 1, name: 'Aaron' }), {
+    id: 3,
+    name: 'Aaron',
+  });
+  assert.deepEqual(await client.updateClientContact(3, { phone: '555' }), {
+    id: 3,
+    name: 'Aaron',
+  });
+});
+
+test('company unwraps the singular company object and throws when missing', async () => {
+  const ok = makeClient(() => new Response('{"company":{"id":5,"name":"Acme"}}'));
+  assert.deepEqual(await ok.company(), { id: 5, name: 'Acme' });
+
+  const empty = makeClient(() => new Response('{}'));
+  await assert.rejects(() => empty.company(), /did not return a company record/);
+});

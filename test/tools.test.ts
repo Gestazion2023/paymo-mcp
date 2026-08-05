@@ -120,20 +120,20 @@ test('start_timer reports no previous entry when nothing was running', async () 
   assert.deepEqual(payloadOf(result), { started: { id: 2, task_id: 1234 }, previous_closed: null });
 });
 
-test('read-only mode registers the read tools only; full registers all 20', () => {
+test('read-only mode registers the read tools only; full registers all 28', () => {
   const readOnly = handlersFor({}, { permissionMode: 'readonly' });
   const full = handlersFor({}, { permissionMode: 'full' });
 
-  assert.equal(readOnly.size, 10);
-  assert.equal(full.size, 20);
+  assert.equal(readOnly.size, 14);
+  assert.equal(full.size, 28);
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
 });
 
-test('default mode registers 19 of 20 tools, everything except paymo_delete_entry', () => {
+test('default mode registers 27 of 28 tools, everything except paymo_delete_entry', () => {
   const handlers = handlersFor({});
 
-  assert.equal(handlers.size, 19);
+  assert.equal(handlers.size, 27);
   assert.equal(handlers.has('paymo_delete_entry'), false);
   assert.equal(handlers.has('paymo_stop_timer'), true);
   assert.equal(handlers.has('paymo_create_task'), true);
@@ -279,8 +279,9 @@ test('empty toolset selection resolves to the default toolsets (context, tasks, 
 test('the all keyword expands to every toolset', () => {
   const names = resolve({ toolsets: ['all'], mode: 'full' });
 
-  assert.equal(names.size, 20);
+  assert.equal(names.size, 28);
   assert.equal(names.has('paymo_create_project'), true);
+  assert.equal(names.has('paymo_list_clients'), true);
 });
 
 test('default is a keyword, so default,<toolset> adds instead of replacing', () => {
@@ -329,7 +330,7 @@ test('the deny regex subtracts last, even a tool explicitly named in PAYMO_TOOLS
   });
 
   assert.equal(names.has('paymo_create_task'), false);
-  assert.equal(names.size, 17);
+  assert.equal(names.size, 23);
 });
 
 test('permission mode wins over every explicit selection', () => {
@@ -511,4 +512,229 @@ test('the projects toolset registers its reads under readonly and all nine under
   assert.equal(readOnly.has('paymo_update_project'), false);
   assert.equal(readOnly.has('paymo_get_project'), true);
   assert.equal(modify.has('paymo_create_project'), true);
+});
+
+test('the clients toolset registers its reads under readonly and all eight under modify', () => {
+  const registered = new Set(TOOLSETS.clients);
+  const readOnly = handlersFor({}, { permissionMode: 'readonly', registeredTools: registered });
+  const modify = handlersFor({}, { permissionMode: 'modify', registeredTools: registered });
+
+  assert.equal(readOnly.size, 4);
+  assert.equal(modify.size, 8);
+  assert.equal(readOnly.has('paymo_update_client'), false);
+  assert.equal(readOnly.has('paymo_get_company'), true);
+  assert.equal(readOnly.has('paymo_list_client_contacts'), true);
+  assert.equal(modify.has('paymo_create_client'), true);
+});
+
+test('list_clients applies the client summary subset and honors limit and offset', async () => {
+  const handlers = handlersFor({
+    clients: async () => [
+      { id: 1234, name: 'Acme', email: 'a@acme.com', country: 'US', active: true, phone: '555', image: 'http://x/logo.png' },
+      { id: 5678, name: 'Globex', email: 'g@globex.com', country: 'GB', active: false, phone: '666', image: 'http://y/logo.png' },
+    ],
+  });
+
+  const result = await handlers.get('paymo_list_clients')!({
+    active: true,
+    limit: 1,
+    offset: 1,
+    verbose: false,
+  });
+
+  assert.deepEqual(payloadOf(result), [
+    { id: 5678, name: 'Globex', email: 'g@globex.com', country: 'GB', active: false },
+  ]);
+});
+
+test('list_clients verbose returns each raw client untouched', async () => {
+  const raw = { id: 1234, name: 'Acme', phone: '555', image: 'http://x/logo.png' };
+  const handlers = handlersFor({ clients: async () => [raw] });
+
+  const result = await handlers.get('paymo_list_clients')!({
+    active: true,
+    limit: 5,
+    offset: 0,
+    verbose: true,
+  });
+
+  assert.deepEqual(payloadOf(result), [raw]);
+});
+
+test('get_client returns the client detail subset with the write fields visible', async () => {
+  const handlers = handlersFor({
+    client: async () => ({
+      id: 1234,
+      name: 'Acme',
+      country: 'US',
+      fiscal_information: 'VAT-123',
+      active: true,
+      image: 'http://x/logo.png',
+    }),
+  });
+
+  const result = await handlers.get('paymo_get_client')!({ client_id: 1234, verbose: false });
+
+  assert.deepEqual(payloadOf(result), {
+    id: 1234,
+    name: 'Acme',
+    country: 'US',
+    fiscal_information: 'VAT-123',
+    active: true,
+  });
+});
+
+test('list_client_contacts filters by client_id and keeps the contact write fields', async () => {
+  let requestedClient: number | null = null;
+  const handlers = handlersFor({
+    clientContacts: async (clientId) => {
+      requestedClient = clientId;
+      return [{
+        id: 1,
+        client_id: 1234,
+        name: 'Aaron Cooper',
+        email: 'aaron@x.com',
+        mobile: '555-0100',
+        phone: '555-0101',
+        fax: '555-0102',
+        skype: 'aaron.c',
+        position: 'CEO',
+        is_main: true,
+        access: false,
+        notes: 'prefers email',
+        image: 'http://x/contact.jpg',
+        created_on: '2013-07-24T11:52:44Z',
+      }];
+    },
+  });
+
+  const result = await handlers.get('paymo_list_client_contacts')!({
+    client_id: 1234,
+    limit: 10,
+    offset: 0,
+    verbose: false,
+  });
+
+  assert.equal(requestedClient, 1234);
+  assert.deepEqual(payloadOf(result), [{
+    id: 1,
+    client_id: 1234,
+    name: 'Aaron Cooper',
+    email: 'aaron@x.com',
+    mobile: '555-0100',
+    phone: '555-0101',
+    fax: '555-0102',
+    skype: 'aaron.c',
+    position: 'CEO',
+    is_main: true,
+    access: false,
+    notes: 'prefers email',
+  }]);
+});
+
+test('get_company returns the company subset with invoicing defaults', async () => {
+  const handlers = handlersFor({
+    company: async () => ({
+      id: 1234,
+      name: 'Gestazion',
+      default_currency: 'EUR',
+      invoice_format: '#INV-[yyyy][mm][dd]-[i]',
+      account_type: 'commercial',
+      max_users: 4,
+      image: 'http://x/logo.png',
+    }),
+  });
+
+  const result = await handlers.get('paymo_get_company')!({ verbose: false });
+
+  assert.deepEqual(payloadOf(result), {
+    id: 1234,
+    name: 'Gestazion',
+    default_currency: 'EUR',
+    invoice_format: '#INV-[yyyy][mm][dd]-[i]',
+  });
+});
+
+test('create_client forwards every create field', async () => {
+  let captured: unknown;
+  const handlers = handlersFor({
+    createClient: async (data) => {
+      captured = data;
+      return { id: 1 };
+    },
+  });
+
+  const result = await handlers.get('paymo_create_client')!({
+    name: 'Acme',
+    email: 'sales@acme.com',
+    country: 'US',
+    fiscal_information: 'VAT-123',
+  });
+
+  assert.deepEqual(payloadOf(result), { id: 1 });
+  assert.deepEqual(captured, {
+    name: 'Acme',
+    email: 'sales@acme.com',
+    country: 'US',
+    fiscal_information: 'VAT-123',
+  });
+});
+
+test('update_client forwards active as the archive path and nothing else when absent', async () => {
+  let captured: unknown;
+  const handlers = handlersFor({
+    updateClient: async (_id, data) => {
+      captured = data;
+      return { id: 1, active: false };
+    },
+  });
+
+  await handlers.get('paymo_update_client')!({ client_id: 1, active: false });
+
+  assert.deepEqual(captured, { active: false });
+});
+
+test('create_client_contact requires a name and client_id and forwards the portal password', async () => {
+  let captured: unknown;
+  const handlers = handlersFor({
+    createClientContact: async (data) => {
+      captured = data;
+      return { id: 1 };
+    },
+  });
+
+  await handlers.get('paymo_create_client_contact')!({
+    client_id: 1234,
+    name: 'Aaron',
+    position: 'CEO',
+    access: true,
+    password: 'secret',
+  });
+
+  assert.deepEqual(captured, {
+    client_id: 1234,
+    name: 'Aaron',
+    position: 'CEO',
+    access: true,
+    password: 'secret',
+  });
+});
+
+test('update_client_contact forwards a changed subset and the portal access grant', async () => {
+  let captured: unknown;
+  const handlers = handlersFor({
+    updateClientContact: async (_id, data) => {
+      captured = data;
+      return { id: 1 };
+    },
+  });
+
+  await handlers.get('paymo_update_client_contact')!({
+    contact_id: 1,
+    phone: '555-0199',
+    access: true,
+    password: 'secret',
+  });
+
+  assert.deepEqual(captured, { phone: '555-0199', access: true, password: 'secret' });
 });
