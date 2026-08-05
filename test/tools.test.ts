@@ -399,3 +399,21 @@ test('stop_timer does not blame the minute rule when the entry is not sub-minute
   assert.equal(text.includes('paymo_delete_entry'), false);
   assert.match(text, /refused/);
 });
+
+test('a 429 on a young entry is reported as a rate limit, not as the sub-minute rule', async () => {
+  const subMinute = new Date(Date.now() - 20_000).toISOString();
+  const handlers = handlersFor({
+    currentUserId: async () => 9,
+    runningEntry: async () => ({ id: 1, start_time: subMinute, end_time: null, duration: 0 }),
+    stopEntry: async () => {
+      throw new PaymoHttpError(429, '{"message":"Too Many Requests"}');
+    },
+  });
+
+  const result = await handlers.get('paymo_stop_timer')!({});
+  const text = (result.content?.[0] as { text: string }).text;
+
+  assert.equal(result.isError, true);
+  assert.match(text, /429/);
+  assert.equal(text.includes('under a minute old'), false);
+});

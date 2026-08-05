@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PaymoHttpError } from '../client.ts';
 import type { PaymoRecord } from '../client.ts';
 import { filterRecord } from '../fields.ts';
 import { respond, taskIdentifier, verbose } from './shared.ts';
@@ -19,6 +20,17 @@ function isSubMinute(entry: PaymoRecord): boolean {
   const startedAt = Date.parse(start);
 
   return !Number.isNaN(startedAt) && Date.now() - startedAt < 60_000;
+}
+
+/**
+ * Whether a failure is Paymo rejecting the request rather than something transient. Without this,
+ * any error on a young entry — a 429 the retry could not clear, a 500, a dropped connection — gets
+ * reported as the sub-minute rule, which sends the caller to delete an entry over a problem that
+ * would have resolved on its own. 429 is excluded explicitly because it is the failure this API
+ * produces most often.
+ */
+function isRejection(err: unknown): boolean {
+  return err instanceof PaymoHttpError && err.status >= 400 && err.status < 500 && err.status !== 429;
 }
 
 export const timeTools: Record<string, ToolDef> = {
@@ -96,7 +108,11 @@ export const timeTools: Record<string, ToolDef> = {
           // The default `modify` mode drops paymo_delete_entry, so a caller that hits the
           // sub-minute rejection under the default configuration walks into a dead end unless the
           // error names the way out and the mode that provides it.
-          if (isSubMinute(running) && !ctx.registeredTools.has('paymo_delete_entry')) {
+          if (
+            isRejection(err)
+            && isSubMinute(running)
+            && !ctx.registeredTools.has('paymo_delete_entry')
+          ) {
             throw new Error(
               'Paymo refuses to stop an entry under a minute old. Delete it with paymo_delete_entry, '
               + 'which requires PAYMO_PERMISSION_MODE=full.',
