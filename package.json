@@ -23,6 +23,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prebuild": "rm -rf dist",
     "build": "tsc",
     "test": "node --test --experimental-strip-types test/*.test.ts",
     "postbuild": "chmod +x dist/index.js",
