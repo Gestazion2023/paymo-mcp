@@ -4,3 +4,4 @@ dist/
 # local agent instructions, not part of the package
 AGENTS.md
 CLAUDE.md
+plans/
