@@ -29,12 +29,21 @@ const RICH_TEXT =
   'Paymo renders HTML here (p, b, i, u, s, ul, ol, li, h2, blockquote, a, br, code, pre, span) '
   + 'and strips anything else. Markdown is not rendered: use tags, not ** or backticks.';
 
+/**
+ * Bounded by default: a 90-task project answers with ~19 kB even after field filtering, and once
+ * that lands in the conversation it is re-sent on every later turn. Raise it explicitly when you
+ * genuinely need more, and page with `offset`.
+ */
 const limit = z
   .number()
   .int()
   .min(1)
-  .optional()
-  .describe('Maximum number of records to return. Omit to return the full list.');
+  .default(50)
+  .describe(
+    'Maximum number of records to return (default 50). Raise it when you need more, and use '
+    + 'offset to page. Large listings are expensive: they stay in context for the rest of the '
+    + 'conversation.',
+  );
 const offset = z
   .number()
   .int()

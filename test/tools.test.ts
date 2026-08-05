@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PaymoClient } from '../src/client.ts';
@@ -9,11 +10,23 @@ import { registerTools, respond } from '../src/tools.ts';
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
-/** Collects the registered handlers so a tool can be invoked without a transport. */
+/**
+ * Collects the registered handlers so a tool can be invoked without a transport. Arguments are
+ * parsed through the tool's own zod schema first, exactly as the SDK does — otherwise `.default()`
+ * values never apply and a wrong default is invisible to every test here.
+ */
 function handlersFor(client: Partial<PaymoClient>, readOnly = false): Map<string, Handler> {
   const handlers = new Map<string, Handler>();
   const server = {
-    registerTool: (name: string, _def: unknown, handler: Handler) => handlers.set(name, handler),
+    registerTool: (
+      name: string,
+      def: { inputSchema?: Record<string, z.ZodTypeAny> },
+      handler: Handler,
+    ) => {
+      const schema = z.object(def.inputSchema ?? {});
+
+      handlers.set(name, (args) => handler(schema.parse(args) as Record<string, unknown>));
+    },
   } as unknown as McpServer;
 
   registerTools(server, {
@@ -190,4 +203,20 @@ test('timer_status filters the running entry to the documented subset', async ()
       duration: 0,
     },
   });
+});
+
+test('list tools cap the response at 50 records unless a larger limit is asked for', async () => {
+  const many = Array.from({ length: 120 }, (_, i) => ({ id: 1000 + i, name: `P${i}`, code: 'X' }));
+  const handlers = handlersFor({ projects: async () => many });
+
+  const capped = await handlers.get('paymo_list_projects')!({ active: true, offset: 0, verbose: false });
+  assert.equal((payloadOf(capped) as unknown[]).length, 50);
+
+  const raised = await handlers.get('paymo_list_projects')!({
+    active: true,
+    limit: 120,
+    offset: 0,
+    verbose: false,
+  });
+  assert.equal((payloadOf(raised) as unknown[]).length, 120);
 });

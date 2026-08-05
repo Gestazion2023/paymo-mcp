@@ -95,7 +95,8 @@ way out, and the only reason this package ships a delete tool at all.
 Paymo answers with 20–40 fields per record; a project listing comes back several times larger than
 the whole tool catalogue. The list and detail tools therefore return a **documented field subset** —
 an agent needs `id`, `name`, `code`, not `flat_billing` or `cover_file_id`. List tools take
-`limit` and `offset` for paging, and return a **narrower summary subset** than detail reads: a
+`limit` (**default 50**) and `offset` for paging, and return a **narrower summary subset** than
+detail reads: a
 listing exists to pick a record, so it carries `id`/`name`/`code` and the couple of fields needed to
 choose, while `paymo_get_task` and `paymo_me` keep the fuller set. Pass `verbose: true` to any read
 tool when you genuinely need every field Paymo provides — it bypasses both subsets.
