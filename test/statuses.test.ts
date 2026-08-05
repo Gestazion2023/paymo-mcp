@@ -48,8 +48,24 @@ test('resolveStatusId applies an env override on top of the discovered map', asy
 });
 
 test('resolveStatusId exposes env-only aliases without calling discover', async () => {
+  let calls = 0;
   const resolver = new StatusResolver({ wip: 999 });
-  assert.equal(await resolver.resolve('wip', async () => []), 999);
+  const discover = async () => {
+    calls += 1;
+    return [];
+  };
+
+  assert.equal(await resolver.resolve('wip', discover), 999);
+  assert.equal(calls, 0);
+});
+
+test('resolveStatusId slugifies the lookup so spelling variants hit the same alias', async () => {
+  const resolver = new StatusResolver();
+  const discover = async () => [{ id: 123, name: 'In Progress' }];
+
+  for (const spelling of ['In Progress', 'IN-PROGRESS', 'in progress', 'in_progress']) {
+    assert.equal(await resolver.resolve(spelling, discover), 123, spelling);
+  }
 });
 
 test('resolveStatusId throws a clear error for a colliding alias', async () => {

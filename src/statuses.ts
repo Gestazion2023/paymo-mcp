@@ -26,13 +26,13 @@ export class StatusResolver {
       return Number.parseInt(trimmed, 10);
     }
 
-    await this.ensureMap(discover);
-
-    const key = trimmed.toLowerCase();
+    const key = slugify(trimmed);
 
     if (key in this.envAliases) {
       return this.envAliases[key]!;
     }
+
+    await this.ensureMap(discover);
 
     const value = this.map?.[key];
 
