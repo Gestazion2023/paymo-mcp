@@ -350,9 +350,58 @@ export class PaymoClient {
     return this.update('clientcontacts', 'clientcontacts', id, data);
   }
 
+  // --- Billing (invoices, invoice payments, estimates, invoice templates) ---
+  async invoices(where?: string): Promise<PaymoRecord[]> {
+    return this.list('invoices', 'invoices', where);
+  }
+
+  async invoicePayments(invoiceId: number | null): Promise<PaymoRecord[]> {
+    return this.list(
+      'invoicepayments',
+      'invoicepayments',
+      invoiceId === null ? undefined : `invoice_id=${invoiceId}`,
+    );
+  }
+
+  async estimates(where?: string): Promise<PaymoRecord[]> {
+    return this.list('estimates', 'estimates', where);
+  }
+
+  async invoiceTemplates(): Promise<PaymoRecord[]> {
+    return this.list('invoicetemplates', 'invoicetemplates');
+  }
+
+  /**
+   * The detail reads ride the generic `one` helper only as far as the resolves, but both need
+   * `?include=…items` to return their line items — the plan's `paymo_get_invoice` and
+   * `paymo_get_estimate` are explicitly "detail, including line items". `one` takes no query, so
+   * these are hand-written.
+   */
+  async invoice(id: number): Promise<PaymoRecord> {
+    const payload = await this.request('GET', `/invoices/${id}?include=invoiceitems`);
+    const record = (payload.invoices as PaymoRecord[] | undefined)?.[0];
+
+    if (record === undefined) {
+      throw new Error(`Invoice ${id} not found.`);
+    }
+
+    return record;
+  }
+
+  async estimate(id: number): Promise<PaymoRecord> {
+    const payload = await this.request('GET', `/estimates/${id}?include=estimateitems`);
+    const record = (payload.estimates as PaymoRecord[] | undefined)?.[0];
+
+    if (record === undefined) {
+      throw new Error(`Estimate ${id} not found.`);
+    }
+
+    return record;
+  }
+
   /**
    * `company` is the one record returned as a single object (`{"company":{…}}`) rather than
-   * wrapped in an array like every other resource, so it cannot ride the generic helpers.
+   * wrapped in an array like every other record, so it cannot ride the generic helpers.
    */
   async company(): Promise<PaymoRecord> {
     const payload = await this.request('GET', '/company');

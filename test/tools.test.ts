@@ -120,20 +120,20 @@ test('start_timer reports no previous entry when nothing was running', async () 
   assert.deepEqual(payloadOf(result), { started: { id: 2, task_id: 1234 }, previous_closed: null });
 });
 
-test('read-only mode registers the read tools only; full registers all 28', () => {
+test('read-only mode registers the read tools only; full registers all 34', () => {
   const readOnly = handlersFor({}, { permissionMode: 'readonly' });
   const full = handlersFor({}, { permissionMode: 'full' });
 
-  assert.equal(readOnly.size, 14);
-  assert.equal(full.size, 28);
+  assert.equal(readOnly.size, 20);
+  assert.equal(full.size, 34);
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
 });
 
-test('default mode registers 27 of 28 tools, everything except paymo_delete_entry', () => {
+test('default mode registers 33 of 34 tools, everything except paymo_delete_entry', () => {
   const handlers = handlersFor({});
 
-  assert.equal(handlers.size, 27);
+  assert.equal(handlers.size, 33);
   assert.equal(handlers.has('paymo_delete_entry'), false);
   assert.equal(handlers.has('paymo_stop_timer'), true);
   assert.equal(handlers.has('paymo_create_task'), true);
@@ -279,9 +279,10 @@ test('empty toolset selection resolves to the default toolsets (context, tasks, 
 test('the all keyword expands to every toolset', () => {
   const names = resolve({ toolsets: ['all'], mode: 'full' });
 
-  assert.equal(names.size, 28);
+  assert.equal(names.size, 34);
   assert.equal(names.has('paymo_create_project'), true);
   assert.equal(names.has('paymo_list_clients'), true);
+  assert.equal(names.has('paymo_list_invoices'), true);
 });
 
 test('default is a keyword, so default,<toolset> adds instead of replacing', () => {
@@ -304,8 +305,8 @@ test('toolset names are additive, case-insensitive and whitespace-tolerant', () 
 
 test('an unknown toolset aborts and lists the valid values', () => {
   assert.throws(
-    () => resolve({ toolsets: ['billing'] }),
-    /Unknown toolset 'billing'.*Valid toolsets:.*context/,
+    () => resolve({ toolsets: ['bogus'] }),
+    /Unknown toolset 'bogus'.*Valid toolsets:.*context/,
   );
 });
 
@@ -330,7 +331,7 @@ test('the deny regex subtracts last, even a tool explicitly named in PAYMO_TOOLS
   });
 
   assert.equal(names.has('paymo_create_task'), false);
-  assert.equal(names.size, 23);
+  assert.equal(names.size, 29);
 });
 
 test('permission mode wins over every explicit selection', () => {
@@ -737,4 +738,268 @@ test('update_client_contact forwards a changed subset and the portal access gran
   });
 
   assert.deepEqual(captured, { phone: '555-0199', access: true, password: 'secret' });
+});
+
+test('the billing toolset is all read: six tools under readonly and under modify', () => {
+  const registered = new Set(TOOLSETS.billing);
+  const readOnly = handlersFor({}, { permissionMode: 'readonly', registeredTools: registered });
+  const modify = handlersFor({}, { permissionMode: 'modify', registeredTools: registered });
+
+  assert.equal(readOnly.size, 6);
+  assert.equal(modify.size, 6);
+  assert.equal(readOnly.has('paymo_get_invoice'), true);
+  assert.equal(readOnly.has('paymo_list_estimates'), true);
+  assert.equal(readOnly.has('paymo_list_invoice_payments'), true);
+});
+
+test('list_invoices filters by status and client and returns the summary subset', async () => {
+  let requestedWhere: string | undefined;
+  const handlers = handlersFor({
+    invoices: async (where) => {
+      requestedWhere = where;
+      return [{
+        id: 1234,
+        number: '#1041',
+        client_id: 5,
+        status: 'paid',
+        currency: 'EUR',
+        date: '2026-01-01',
+        due_date: '2026-02-01',
+        total: 100,
+        bill_to: 'Acme',
+        download_token: 'secret-token',
+        invoiceitems: [{ id: 1 }],
+      }];
+    },
+  });
+
+  const result = await handlers.get('paymo_list_invoices')!({
+    status: 'paid',
+    client_id: 5,
+    limit: 10,
+    offset: 0,
+    verbose: false,
+  });
+
+  assert.equal(requestedWhere, 'status=paid and client_id=5');
+  assert.deepEqual(payloadOf(result), [{
+    id: 1234,
+    number: '#1041',
+    client_id: 5,
+    status: 'paid',
+    currency: 'EUR',
+    date: '2026-01-01',
+    due_date: '2026-02-01',
+    total: 100,
+  }]);
+});
+
+test('list_invoices with no filters passes no where clause', async () => {
+  let requestedWhere: string | undefined;
+  const handlers = handlersFor({
+    invoices: async (where) => {
+      requestedWhere = where;
+      return [{ id: 1234, number: '#1041', status: 'draft', total: 0 }];
+    },
+  });
+
+  await handlers.get('paymo_list_invoices')!({ limit: 10, offset: 0, verbose: false });
+
+  assert.equal(requestedWhere, undefined);
+});
+
+test('list_invoices verbose returns each raw invoice untouched', async () => {
+  const raw = {
+    id: 1234,
+    number: '#1041',
+    client_id: 5,
+    status: 'draft',
+    download_token: 'secret-token',
+  };
+  const handlers = handlersFor({ invoices: async () => [raw] });
+
+  const result = await handlers.get('paymo_list_invoices')!({
+    limit: 5,
+    offset: 0,
+    verbose: true,
+  });
+
+  assert.deepEqual(payloadOf(result), [raw]);
+});
+
+test('get_invoice returns the invoice detail subset including line items', async () => {
+  const handlers = handlersFor({
+    invoice: async () => ({
+      id: 1234,
+      number: '#1041',
+      client_id: 5,
+      status: 'paid',
+      currency: 'EUR',
+      total: 100,
+      subtotal: 80,
+      invoiceitems: [{ id: 1, item: 'Logo', price_unit: 40, quantity: 2 }],
+      download_token: 'secret-token',
+      permalink: 'https://app.paymoapp.com/api/invoices/1234/?token=x',
+    }),
+  });
+
+  const result = await handlers.get('paymo_get_invoice')!({ invoice_id: 1234, verbose: false });
+
+  assert.deepEqual(payloadOf(result), {
+    id: 1234,
+    number: '#1041',
+    client_id: 5,
+    status: 'paid',
+    currency: 'EUR',
+    total: 100,
+    subtotal: 80,
+    invoiceitems: [{ id: 1, item: 'Logo', price_unit: 40, quantity: 2 }],
+  });
+});
+
+test('list_invoice_payments filters by invoice_id and keeps the payment fields', async () => {
+  let requestedInvoice: number | null = null;
+  const handlers = handlersFor({
+    invoicePayments: async (invoiceId) => {
+      requestedInvoice = invoiceId;
+      return [{
+        id: 1234,
+        invoice_id: 5678,
+        amount: 15.25,
+        date: '2026-09-28',
+        notes: 'bank transfer',
+        created_on: '2026-09-28T19:20:03Z',
+        updated_on: '2026-09-28T19:20:03Z',
+      }];
+    },
+  });
+
+  const result = await handlers.get('paymo_list_invoice_payments')!({
+    invoice_id: 5678,
+    limit: 10,
+    offset: 0,
+    verbose: false,
+  });
+
+  assert.equal(requestedInvoice, 5678);
+  assert.deepEqual(payloadOf(result), [{
+    id: 1234,
+    invoice_id: 5678,
+    amount: 15.25,
+    date: '2026-09-28',
+    notes: 'bank transfer',
+    created_on: '2026-09-28T19:20:03Z',
+    updated_on: '2026-09-28T19:20:03Z',
+  }]);
+});
+
+test('list_invoice_payments with no invoice_id lists every payment', async () => {
+  let requestedInvoice: number | null = null;
+  const handlers = handlersFor({
+    invoicePayments: async (invoiceId) => {
+      requestedInvoice = invoiceId;
+      return [];
+    },
+  });
+
+  await handlers.get('paymo_list_invoice_payments')!({ limit: 10, offset: 0, verbose: false });
+
+  assert.equal(requestedInvoice, null);
+});
+
+test('list_estimates filters by status and client and returns the summary subset', async () => {
+  let requestedWhere: string | undefined;
+  const handlers = handlersFor({
+    estimates: async (where) => {
+      requestedWhere = where;
+      return [{
+        id: 1234,
+        number: '#2013',
+        client_id: 5,
+        status: 'draft',
+        currency: 'EUR',
+        date: '2026-01-01',
+        total: 50,
+        invoice_id: null,
+        download_token: 'secret-token',
+      }];
+    },
+  });
+
+  const result = await handlers.get('paymo_list_estimates')!({
+    status: 'draft',
+    client_id: 5,
+    limit: 10,
+    offset: 0,
+    verbose: false,
+  });
+
+  assert.equal(requestedWhere, 'status=draft and client_id=5');
+  assert.deepEqual(payloadOf(result), [{
+    id: 1234,
+    number: '#2013',
+    client_id: 5,
+    status: 'draft',
+    currency: 'EUR',
+    date: '2026-01-01',
+    total: 50,
+  }]);
+});
+
+test('get_estimate returns the estimate detail subset including line items', async () => {
+  const handlers = handlersFor({
+    estimate: async () => ({
+      id: 1234,
+      number: '#2013',
+      client_id: 5,
+      status: 'sent',
+      currency: 'EUR',
+      date: '2026-01-01',
+      total: 50,
+      invoice_id: null,
+      estimateitems: [{ id: 1, item: 'Logo', price_unit: 40, quantity: 1 }],
+      permalink: 'https://app.paymoapp.com/api/estimates/1234/?token=x',
+    }),
+  });
+
+  const result = await handlers.get('paymo_get_estimate')!({ estimate_id: 1234, verbose: false });
+
+  assert.deepEqual(payloadOf(result), {
+    id: 1234,
+    number: '#2013',
+    client_id: 5,
+    status: 'sent',
+    currency: 'EUR',
+    date: '2026-01-01',
+    total: 50,
+    invoice_id: null,
+    estimateitems: [{ id: 1, item: 'Logo', price_unit: 40, quantity: 1 }],
+  });
+});
+
+test('list_invoice_templates keeps the layout identity and drops the html and css bodies', async () => {
+  const handlers = handlersFor({
+    invoiceTemplates: async () => [{
+      id: 1234,
+      name: 'English - Client on right',
+      title: 'INVOICE',
+      is_default: false,
+      html: '<div class="invoice">very long template body</div>',
+      css: '#invoice-title { color: #999; }',
+      created_on: '2014-11-19T09:45:32Z',
+    }],
+  });
+
+  const result = await handlers.get('paymo_list_invoice_templates')!({
+    limit: 10,
+    offset: 0,
+    verbose: false,
+  });
+
+  assert.deepEqual(payloadOf(result), [{
+    id: 1234,
+    name: 'English - Client on right',
+    title: 'INVOICE',
+    is_default: false,
+  }]);
 });

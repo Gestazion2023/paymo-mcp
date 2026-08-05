@@ -310,3 +310,63 @@ test('company unwraps the singular company object and throws when missing', asyn
   const empty = makeClient(() => new Response('{}'));
   await assert.rejects(() => empty.company(), /did not return a company record/);
 });
+
+test('invoices and estimates pass an optional where clause to their plural endpoints', async () => {
+  let url = '';
+  const client = makeClient((u) => {
+    url = u;
+    return new Response('{"invoices":[]}');
+  });
+
+  assert.deepEqual(await client.invoices('status=paid and client_id=5'), []);
+  assert.match(url, /where=status%3Dpaid\+and\+client_id%3D5/);
+
+  assert.deepEqual(await client.estimates(), []);
+  assert.equal(url, 'https://app.paymoapp.com/api/estimates');
+});
+
+test('invoicePayments filters by invoice_id when given and lists all otherwise', async () => {
+  let url = '';
+  const client = makeClient((u) => {
+    url = u;
+    return new Response('{"invoicepayments":[]}');
+  });
+
+  await client.invoicePayments(9876);
+  assert.match(url, /where=invoice_id%3D9876/);
+
+  await client.invoicePayments(null);
+  assert.equal(url, 'https://app.paymoapp.com/api/invoicepayments');
+});
+
+test('invoice and estimate detail reads ask for their line items and unwrap the record', async () => {
+  let invoiceUrl = '';
+  const client = makeClient((u) => {
+    const route = invoiceUrl ? 'estimates' : 'invoices';
+    invoiceUrl = u;
+
+    return new Response(JSON.stringify({ [route]: [{ id: 7 }] }));
+  });
+
+  assert.deepEqual(await client.invoice(7), { id: 7 });
+  assert.match(invoiceUrl, /\/invoices\/7\?include=invoiceitems/);
+
+  assert.deepEqual(await client.estimate(7), { id: 7 });
+  assert.match(invoiceUrl, /\/estimates\/7\?include=estimateitems/);
+});
+
+test('invoice throws when the record is missing and unwraps the invoices key', async () => {
+  const ok = makeClient(() => new Response('{"invoices":[{"id":7}]}'));
+  assert.deepEqual(await ok.invoice(7), { id: 7 });
+
+  const empty = makeClient(() => new Response('{"invoices":[]}'));
+  await assert.rejects(() => empty.invoice(7), /Invoice 7 not found/);
+});
+
+test('invoiceTemplates unwraps the invoicetemplates key', async () => {
+  const client = makeClient(() => new Response('{"invoicetemplates":[{"id":1130,"name":"English - Client on right"}]}'));
+
+  assert.deepEqual(await client.invoiceTemplates(), [
+    { id: 1130, name: 'English - Client on right' },
+  ]);
+});

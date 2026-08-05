@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ConfigError } from '../config.ts';
 import type { PermissionMode } from '../config.ts';
+import { billingTools } from './billing.ts';
 import { clientsTools } from './clients.ts';
 import { contextTools } from './context.ts';
 import { projectsTools } from './projects.ts';
@@ -16,6 +17,7 @@ export { respond } from './shared.ts';
  * reconcile — it is one entry referenced twice. A toolset is just a list of names into `TOOLS`.
  */
 export const TOOLS: Record<string, ToolDef> = {
+  ...billingTools,
   ...clientsTools,
   ...contextTools,
   ...projectsTools,
@@ -39,6 +41,10 @@ export const TOOLSETS: Record<string, string[]> = {
     'paymo_list_clients', 'paymo_get_client', 'paymo_list_client_contacts', 'paymo_get_company',
     'paymo_create_client', 'paymo_update_client',
     'paymo_create_client_contact', 'paymo_update_client_contact',
+  ],
+  billing: [
+    'paymo_list_invoices', 'paymo_get_invoice', 'paymo_list_invoice_payments',
+    'paymo_list_estimates', 'paymo_get_estimate', 'paymo_list_invoice_templates',
   ],
 };
 

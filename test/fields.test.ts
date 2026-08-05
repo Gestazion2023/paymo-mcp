@@ -319,3 +319,75 @@ test('company subset keeps the invoicing defaults and drops plan counters and im
     timezone: 'Europe/Madrid',
   });
 });
+
+test('invoiceSummary is a strict subset of the invoice detail subset', () => {
+  for (const key of SUBSETS.invoiceSummary) {
+    assert.ok(SUBSETS.invoice.includes(key), `invoiceSummary field '${key}' is not in the invoice detail subset`);
+  }
+
+  assert.ok(SUBSETS.invoiceSummary.length < SUBSETS.invoice.length);
+});
+
+test('estimateSummary is a strict subset of the estimate detail subset', () => {
+  for (const key of SUBSETS.estimateSummary) {
+    assert.ok(SUBSETS.estimate.includes(key), `estimateSummary field '${key}' is not in the estimate detail subset`);
+  }
+
+  assert.ok(SUBSETS.estimateSummary.length < SUBSETS.estimate.length);
+});
+
+test('invoice subset keeps the money fields and line items and drops the download token and links', () => {
+  const record = {
+    id: 1234,
+    number: '#1041',
+    client_id: 5,
+    status: 'paid',
+    currency: 'EUR',
+    date: '2026-01-01',
+    due_date: '2026-02-01',
+    subtotal: 80,
+    total: 100,
+    tax: 20,
+    tax_amount: 20,
+    invoiceitems: [{ id: 1, item: 'Logo', price_unit: 40, quantity: 2 }],
+    download_token: 'secret-token',
+    permalink: 'https://app.paymoapp.com/api/invoices/1234/?token=x',
+    pdf_link: 'https://app.paymoapp.com/api/invoices/1234/?token=x&format=pdf',
+    token: 'secret',
+    reminders_sent: 2,
+  };
+
+  assert.deepEqual(filterRecord(record, 'invoice', false), {
+    id: 1234,
+    number: '#1041',
+    client_id: 5,
+    status: 'paid',
+    currency: 'EUR',
+    date: '2026-01-01',
+    due_date: '2026-02-01',
+    subtotal: 80,
+    total: 100,
+    tax: 20,
+    tax_amount: 20,
+    invoiceitems: [{ id: 1, item: 'Logo', price_unit: 40, quantity: 2 }],
+  });
+});
+
+test('invoiceTemplate drops the html and css template bodies', () => {
+  const template = {
+    id: 1234,
+    name: 'English - Client on right',
+    title: 'INVOICE',
+    is_default: true,
+    html: '<div class="invoice">very long body</div>',
+    css: '#invoice-title { color: #999; }',
+    created_on: '2014-11-19T09:45:32Z',
+  };
+
+  assert.deepEqual(filterRecord(template, 'invoiceTemplate', false), {
+    id: 1234,
+    name: 'English - Client on right',
+    title: 'INVOICE',
+    is_default: true,
+  });
+});

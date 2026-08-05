@@ -20,7 +20,13 @@ export type RecordKind =
   | 'client'
   | 'clientSummary'
   | 'clientContact'
-  | 'company';
+  | 'company'
+  | 'invoice'
+  | 'invoiceSummary'
+  | 'invoicePayment'
+  | 'estimate'
+  | 'estimateSummary'
+  | 'invoiceTemplate';
 
 export const SUBSETS: Record<RecordKind, readonly string[]> = {
   user: [
@@ -80,6 +86,40 @@ export const SUBSETS: Record<RecordKind, readonly string[]> = {
     'default_currency', 'default_price_per_hour', 'default_tax', 'default_tax_text',
     'invoice_format', 'next_invoice_number', 'date_format', 'time_format', 'timezone',
   ],
+  // The billing toolset is read-only, so no write tool accepts any of these fields and there is no
+  // update-replacement data-loss path. The detail read answers "what is this invoice, what was
+  // billed, has it been paid"; the heavy dropped fields are the one-time download token and the
+  // long signed permalink/pdf_link URLs that carry it — a credential-shaped string a model cannot
+  // act on — plus the deprecated `language` and the reminder_* email-ops flags.
+  invoice: [
+    'id', 'number', 'client_id', 'template_id', 'status', 'currency', 'date', 'due_date',
+    'subtotal', 'total', 'tax', 'tax2', 'tax_amount', 'tax2_amount', 'discount', 'discount_amount',
+    'tax_on_tax', 'tax_text', 'tax2_text', 'discount_text', 'title', 'delivery_date',
+    'pay_online', 'outstanding', 'bill_to', 'company_info', 'footer', 'notes',
+    'created_on', 'updated_on', 'invoiceitems',
+  ],
+  // Same split as projects/clients: a listing is for picking. The plan fixes this exactly — enough
+  // to choose an invoice, nothing more.
+  invoiceSummary: ['id', 'number', 'client_id', 'status', 'date', 'due_date', 'total', 'currency'],
+  // Payments only have a listing here (no detail read), so this doubles as the detail subset and
+  // keeps every field — it is small and `amount`/`date`/`notes` are the whole point.
+  invoicePayment: ['id', 'invoice_id', 'amount', 'date', 'notes', 'created_on', 'updated_on'],
+  // Estimate detail mirrors invoice: same money fields, minus the invoice-only ones. Estimates
+  // have no due_date or delivery_date; `invoice_id` links the estimate to the invoice created from
+  // it. Dropped for the same reasons as invoice: download_token, signed permalink/pdf_link URLs,
+  // deprecated `language`.
+  estimate: [
+    'id', 'number', 'client_id', 'template_id', 'status', 'currency', 'date',
+    'subtotal', 'total', 'tax', 'tax2', 'tax_amount', 'tax2_amount', 'discount', 'discount_amount',
+    'tax_on_tax', 'tax_text', 'tax2_text', 'discount_text', 'title', 'brief_description',
+    'bill_to', 'company_info', 'footer', 'notes', 'invoice_id', 'created_on', 'updated_on',
+    'estimateitems',
+  ],
+  estimateSummary: ['id', 'number', 'client_id', 'status', 'date', 'total', 'currency'],
+  // Lookup tool for "what layouts exist" and to resolve a template_id. The `html` and `css`
+  // template bodies are tens of kilobytes each — a listing carrying them would blow the context
+  // for a question the model cannot act on (there is no write tool to edit a template).
+  invoiceTemplate: ['id', 'name', 'title', 'is_default'],
 };
 
 /**

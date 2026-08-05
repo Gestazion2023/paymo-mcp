@@ -69,7 +69,8 @@ guessing which variable won.
 | `time` | time entries: timer control, manual logging, deletion | 4 | 795 |
 | `projects` | project CRUD, project templates, project statuses, tasklists (write) — milestones deferred | 9 | 5,794 |
 | `clients` | client CRUD (no delete), client contacts, company — portal access included | 8 | 6,136 |
-| `all` | every toolset above | 28 | 19,186 |
+| `billing` | invoices, invoice payments, estimates, invoice templates — **read-only, deliberately** | 6 | 4,124 |
+| `all` | every toolset above | 34 | 21,710 |
 
 `default` = `context` + `tasks` + `time`, which is approximately the surface the package exposed
 before toolsets existed — an existing user upgrading sees no change. Names are additive and
@@ -184,6 +185,12 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_get_client` | `client_id` (req), `verbose?` | `GET /clients/{id}` |
 | `paymo_list_client_contacts` | `client_id?: number`, `limit?`, `offset?`, `verbose?` | `GET /clientcontacts?where=client_id=…` |
 | `paymo_get_company` | `verbose?` | `GET /company` |
+| `paymo_list_invoices` | `status?: draft/sent/viewed/paid/void`, `client_id?: number`, `limit?`, `offset?`, `verbose?` | `GET /invoices?where=…` |
+| `paymo_get_invoice` | `invoice_id` (req), `verbose?` | `GET /invoices/{id}?include=invoiceitems` |
+| `paymo_list_invoice_payments` | `invoice_id?: number`, `limit?`, `offset?`, `verbose?` | `GET /invoicepayments?where=invoice_id=…` |
+| `paymo_list_estimates` | `status?: draft/sent/viewed/accepted/invoiced/void`, `client_id?: number`, `limit?`, `offset?`, `verbose?` | `GET /estimates?where=…` |
+| `paymo_get_estimate` | `estimate_id` (req), `verbose?` | `GET /estimates/{id}?include=estimateitems` |
+| `paymo_list_invoice_templates` | `limit?`, `offset?`, `verbose?` | `GET /invoicetemplates` |
 
 **Write** — registered under `modify` and `full`.
 
@@ -261,6 +268,23 @@ The client, client-contact, and company writes are **unverified live**: the pack
 an Employee, and Paymo answers admin-level creates (`POST /clients`, `POST /clientcontacts`) with a
 403. The reads are verified against a real account; the writes are covered by stub-client unit tests
 and are slated for the human-run admin verification pass once an administrator key is available.
+
+### Billing
+
+The billing toolset is **read-only, deliberately** — it is the one toolset that ships no write tool
+on purpose, and this is a decision, not an oversight. An invoice is a client-facing financial
+document: a wrong write lands as a draft in an accounting export, a payment against the wrong
+invoice, or a document sent to a client, and none of that is recoverable the way a wrong task status
+is. Automated invoicing was never a requirement; reading state to answer "has this been paid" is.
+If invoicing writes are ever needed, that is a separate, separately-argued addition built after the
+admin verification pass.
+
+The `billing` reads (invoices, estimates, invoice templates) return 403 on the package's example
+account — `{"message":"Listing invoices denied"}` — which points at the account's plan tier not
+granting invoicing reads to this key. So those reads are **unverified live** and covered by
+stub-client unit tests instead; `paymo_list_invoice_payments` is readable (the account has none
+yet) and `paymo_get_estimate` reaches Paymo's estimate lookup. These denials are §19's documented
+outcome for a plan tier without invoicing, not a bug in the requests.
 
 ### Rich text
 
