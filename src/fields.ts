@@ -23,8 +23,11 @@ const SUBSETS: Record<RecordKind, readonly string[]> = {
     'id', 'name', 'code', 'description', 'client_id', 'client_name', 'workflow_id',
     'status_id', 'active', 'seq', 'created_on', 'updated_on',
   ],
+  // `users` is load-bearing, not informational: paymo_update_task replaces the assignee list
+  // wholesale, so a caller that cannot see the current assignees will silently drop them when
+  // adding one. Never remove it from this subset.
   task: [
-    'id', 'name', 'code', 'project_id', 'tasklist_id', 'user_id', 'complete', 'status_id',
+    'id', 'name', 'code', 'project_id', 'tasklist_id', 'user_id', 'users', 'complete', 'status_id',
     'priority', 'due_date', 'start_date', 'description', 'seq', 'created_on', 'updated_on',
   ],
   tasklist: ['id', 'name', 'project_id', 'seq', 'milestone_id', 'tasks_count'],

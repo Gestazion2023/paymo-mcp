@@ -82,3 +82,19 @@ test('filterRecord keeps the whole entry subset that paymo_timer_status relies o
     billable: true,
   });
 });
+
+test('the task subset keeps `users`, because update_task replaces the assignee list wholesale', () => {
+  const task = {
+    id: 1234,
+    code: 'ABC-1',
+    name: 'Task',
+    user_id: 11,
+    users: [11, 22, 33],
+    cover_file_id: 999,
+  };
+
+  const filtered = filterRecord(task, 'task', false);
+
+  assert.deepEqual(filtered.users, [11, 22, 33]);
+  assert.equal('cover_file_id' in filtered, false);
+});
