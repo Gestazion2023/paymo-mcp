@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { filterRecord, paginate } from '../src/fields.ts';
+import { SUBSETS, filterRecord, paginate } from '../src/fields.ts';
 
 test('filterRecord keeps only the documented subset keys and drops the rest', () => {
   const record = {
@@ -97,4 +97,50 @@ test('the task subset keeps `users`, because update_task replaces the assignee l
 
   assert.deepEqual(filtered.users, [11, 22, 33]);
   assert.equal('cover_file_id' in filtered, false);
+});
+
+test('projectSummary is a strict subset of the project detail subset', () => {
+  for (const key of SUBSETS.projectSummary) {
+    assert.ok(SUBSETS.project.includes(key), `projectSummary field '${key}' is not in the project detail subset`);
+  }
+
+  assert.ok(SUBSETS.projectSummary.length < SUBSETS.project.length);
+});
+
+test('taskSummary is a strict subset of the task detail subset and keeps users', () => {
+  for (const key of SUBSETS.taskSummary) {
+    assert.ok(SUBSETS.task.includes(key), `taskSummary field '${key}' is not in the task detail subset`);
+  }
+
+  assert.ok(SUBSETS.task.includes('users'), 'the task detail subset must keep users');
+  assert.ok(SUBSETS.taskSummary.includes('users'), 'the task summary must keep users, same data-loss argument as the detail subset');
+  assert.ok(SUBSETS.taskSummary.length < SUBSETS.task.length);
+});
+
+test('projectSummary drops the heavy detail fields a listing does not need', () => {
+  const project = {
+    id: 1234,
+    name: 'Website redesign',
+    code: 'WEB',
+    active: true,
+    client_id: 5678,
+    client_name: 'Acme',
+    description: 'long body',
+    workflow_id: 1,
+    status_id: 2,
+    seq: 3,
+    created_on: '2026-01-01T00:00:00Z',
+    updated_on: '2026-01-02T00:00:00Z',
+    flat_billing: true,
+    color: '#fff',
+  };
+
+  assert.deepEqual(filterRecord(project, 'projectSummary', false), {
+    id: 1234,
+    name: 'Website redesign',
+    code: 'WEB',
+    active: true,
+    client_id: 5678,
+    client_name: 'Acme',
+  });
 });

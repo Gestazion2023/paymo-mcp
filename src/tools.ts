@@ -98,7 +98,7 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
     },
     (args) => respond('list projects', async () => {
       const records = await ctx.client.projects(args.active);
-      const filtered = records.map((record) => filterRecord(record, 'project', args.verbose));
+      const filtered = records.map((record) => filterRecord(record, 'projectSummary', args.verbose));
 
       return paginate(filtered, args.limit, args.offset);
     }),
@@ -153,7 +153,7 @@ export function registerTools(server: McpServer, ctx: ToolsContext): void {
         }
 
         const records = await ctx.client.tasks(targetProjectId, !args.include_completed);
-        const filtered = records.map((record) => filterRecord(record, 'task', args.verbose));
+        const filtered = records.map((record) => filterRecord(record, 'taskSummary', args.verbose));
 
         return paginate(filtered, args.limit, args.offset);
       }),

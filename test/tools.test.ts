@@ -124,6 +124,48 @@ test('list_projects verbose returns each raw project untouched', async () => {
   assert.deepEqual(payloadOf(result), [raw]);
 });
 
+test('list_tasks returns the task summary, keeping users and dropping description', async () => {
+  const handlers = handlersFor({
+    tasks: async () => [{
+      id: 1234,
+      name: 'Ship the report',
+      code: 'ABC-1',
+      project_id: 5678,
+      tasklist_id: 90,
+      users: [11, 22],
+      complete: false,
+      status_id: 1,
+      priority: 50,
+      due_date: '2026-08-10',
+      description: 'long body the listing does not need',
+      start_date: '2026-08-01',
+      seq: 3,
+      created_on: '2026-01-01T00:00:00Z',
+    }],
+  });
+
+  const result = await handlers.get('paymo_list_tasks')!({
+    project_id: 5678,
+    include_completed: false,
+    limit: 10,
+    offset: 0,
+    verbose: false,
+  });
+
+  assert.deepEqual(payloadOf(result), [{
+    id: 1234,
+    name: 'Ship the report',
+    code: 'ABC-1',
+    project_id: 5678,
+    tasklist_id: 90,
+    users: [11, 22],
+    complete: false,
+    status_id: 1,
+    priority: 50,
+    due_date: '2026-08-10',
+  }]);
+});
+
 test('timer_status filters the running entry to the documented subset', async () => {
   const handlers = handlersFor({
     currentUserId: async () => 9,

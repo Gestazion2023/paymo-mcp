@@ -9,12 +9,14 @@ import type { PaymoRecord } from './client.ts';
 export type RecordKind =
   | 'user'
   | 'project'
+  | 'projectSummary'
   | 'task'
+  | 'taskSummary'
   | 'tasklist'
   | 'workflowstatus'
   | 'entry';
 
-const SUBSETS: Record<RecordKind, readonly string[]> = {
+export const SUBSETS: Record<RecordKind, readonly string[]> = {
   user: [
     'id', 'name', 'email', 'type', 'active', 'timezone', 'position', 'language',
     'workday_hours', 'created_on', 'updated_on',
@@ -23,12 +25,21 @@ const SUBSETS: Record<RecordKind, readonly string[]> = {
     'id', 'name', 'code', 'description', 'client_id', 'client_name', 'workflow_id',
     'status_id', 'active', 'seq', 'created_on', 'updated_on',
   ],
+  // A listing exists to pick a record, a detail read to act on it. `projectSummary` is what a
+  // caller needs to choose; the detail `project` subset above adds what acting needs.
+  projectSummary: ['id', 'name', 'code', 'active', 'client_id', 'client_name'],
   // `users` is load-bearing, not informational: paymo_update_task replaces the assignee list
   // wholesale, so a caller that cannot see the current assignees will silently drop them when
   // adding one. Never remove it from this subset.
   task: [
     'id', 'name', 'code', 'project_id', 'tasklist_id', 'user_id', 'users', 'complete', 'status_id',
     'priority', 'due_date', 'start_date', 'description', 'seq', 'created_on', 'updated_on',
+  ],
+  // Same split as projects: a listing is for picking. `users` stays here for the same reason it
+  // stays in `task` — dropping it recreates the assignee data-loss bug.
+  taskSummary: [
+    'id', 'name', 'code', 'project_id', 'tasklist_id', 'users', 'complete',
+    'status_id', 'priority', 'due_date',
   ],
   tasklist: ['id', 'name', 'project_id', 'seq', 'milestone_id', 'tasks_count'],
   workflowstatus: ['id', 'workflow_id', 'name', 'seq', 'action', 'color'],
