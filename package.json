@@ -6,12 +6,12 @@
   "author": "Gestazión <developers@gestazion.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gestazion/paymo-mcp.git"
+    "url": "git+https://github.com/Gestazion2023/paymo-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/gestazion/paymo-mcp/issues"
+    "url": "https://github.com/Gestazion2023/paymo-mcp/issues"
   },
-  "homepage": "https://github.com/gestazion/paymo-mcp#readme",
+  "homepage": "https://github.com/Gestazion2023/paymo-mcp#readme",
   "type": "module",
   "bin": {
     "paymo-mcp": "dist/index.js"
