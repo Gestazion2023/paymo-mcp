@@ -242,6 +242,81 @@ export class PaymoClient {
     await this.request('DELETE', `/entries/${entryId}`);
   }
 
+  // --- Generic CRUD helpers ----------------------------------------------
+  // Resource paths and the plural response keys they answer under do not always match
+  // (`/projecttemplates` answers under `project_templates`, not `projecttemplates`), so each
+  // caller passes its known key explicitly rather than trying to derive it.
+  async list(resource: string, pluralKey: string, where?: string): Promise<PaymoRecord[]> {
+    const path = where === undefined
+      ? `/${resource}`
+      : `/${resource}?${this.query({ where })}`;
+
+    const payload = await this.request('GET', path);
+    return (payload[pluralKey] as PaymoRecord[] | undefined) ?? [];
+  }
+
+  async one(resource: string, pluralKey: string, id: number): Promise<PaymoRecord> {
+    const payload = await this.request('GET', `/${resource}/${id}`);
+    const record = (payload[pluralKey] as PaymoRecord[] | undefined)?.[0];
+
+    if (record === undefined) {
+      throw new Error(`${resource} ${id} not found.`);
+    }
+
+    return record;
+  }
+
+  async create(resource: string, pluralKey: string, data: PaymoRecord): Promise<PaymoRecord> {
+    const payload = await this.request('POST', `/${resource}`, { body: data });
+    const record = (payload[pluralKey] as PaymoRecord[] | undefined)?.[0];
+
+    if (record === undefined) {
+      throw new Error(`Paymo did not return a created ${resource} record.`);
+    }
+
+    return record;
+  }
+
+  async update(resource: string, pluralKey: string, id: number, data: PaymoRecord): Promise<PaymoRecord> {
+    const payload = await this.request('PUT', `/${resource}/${id}`, { body: data });
+    const record = (payload[pluralKey] as PaymoRecord[] | undefined)?.[0];
+
+    if (record === undefined) {
+      throw new Error(`${resource} ${id} update did not return a record.`);
+    }
+
+    return record;
+  }
+
+  // --- Projects and tasklists --------------------------------------------
+  async project(id: number): Promise<PaymoRecord> {
+    return this.one('projects', 'projects', id);
+  }
+
+  async projectTemplates(): Promise<PaymoRecord[]> {
+    return this.list('projecttemplates', 'project_templates');
+  }
+
+  async projectStatuses(): Promise<PaymoRecord[]> {
+    return this.list('projectstatuses', 'projectstatuses');
+  }
+
+  async createProject(data: PaymoRecord): Promise<PaymoRecord> {
+    return this.create('projects', 'projects', data);
+  }
+
+  async updateProject(id: number, data: PaymoRecord): Promise<PaymoRecord> {
+    return this.update('projects', 'projects', id, data);
+  }
+
+  async createTasklist(data: PaymoRecord): Promise<PaymoRecord> {
+    return this.create('tasklists', 'tasklists', data);
+  }
+
+  async updateTasklist(id: number, data: PaymoRecord): Promise<PaymoRecord> {
+    return this.update('tasklists', 'tasklists', id, data);
+  }
+
   /**
    * Paymo advertises the window it wants us to wait through `X-Ratelimit-Decay-Period`,
    * so honour that rather than guessing a backoff curve.

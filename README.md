@@ -62,16 +62,22 @@ guessing which variable won.
 
 ### Toolsets
 
-| Toolset | Covers | Tools |
-|---|---|---|
-| `context` | `paymo_me`, `paymo_list_workflow_statuses` — who am I, what statuses exist | 2 |
-| `tasks` | tasks, tasklists (read), comments, subtasks | 7 |
-| `time` | time entries: timer control, manual logging, deletion | 4 |
-| `all` | every toolset above | 13 |
+| Toolset | Covers | Tools | Schema cost (chars) |
+|---|---|---|---|
+| `context` | `paymo_me`, `paymo_list_workflow_statuses` — who am I, what statuses exist | 2 | 1,008 |
+| `tasks` | tasks, tasklists (read), comments, subtasks | 7 | 5,453 |
+| `time` | time entries: timer control, manual logging, deletion | 4 | 795 |
+| `projects` | project CRUD, project templates, project statuses, tasklists (write) — milestones deferred | 9 | 5,794 |
+| `all` | every toolset above | 20 | 13,050 |
 
 `default` = `context` + `tasks` + `time`, which is approximately the surface the package exposed
 before toolsets existed — an existing user upgrading sees no change. Names are additive and
 order-independent, so `PAYMO_TOOLSETS=default,billing` would mean defaults *plus* billing.
+
+Schema cost is measured in **characters** of `inputSchema`, not tokens: no `count_tokens` key was
+available, and a characters-per-token estimate would be guessing. The `projects` toolset references
+`paymo_list_projects` and `paymo_list_tasklists` by name from `tasks`, so selecting `projects` alone
+still gives you the lookups you need to create a task.
 
 ### How the tool set is resolved
 
@@ -170,6 +176,9 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_get_task` | `task: string` (id or code), `verbose?` | `GET /tasks/{id}` |
 | `paymo_list_workflow_statuses` | `limit?`, `offset?`, `verbose?` | `GET /workflowstatuses` |
 | `paymo_timer_status` | `verbose?` | `GET /entries?where=end_time=null and user_id={me}` |
+| `paymo_get_project` | `project_id` (req), `verbose?` | `GET /projects/{id}` |
+| `paymo_list_project_templates` | `limit?`, `offset?`, `verbose?` | `GET /projecttemplates` |
+| `paymo_list_project_statuses` | `limit?`, `offset?`, `verbose?` | `GET /projectstatuses` |
 
 **Write** — registered under `modify` and `full`.
 
@@ -180,6 +189,10 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_add_comment` | `task` (req), `content` (req) | `POST /comments` |
 | `paymo_start_timer` | `task` (req) | `POST /entries` |
 | `paymo_stop_timer` | — | `PUT /entries/{id}` |
+| `paymo_create_project` | `name` (req), `code?`, `client_id?`, `template_id?`, `description?`, `budget_hours?`, `billable?` | `POST /projects` |
+| `paymo_update_project` | `project_id` (req), plus any of `name`, `code`, `client_id`, `description`, `budget_hours`, `billable`, `active`, `status_id` | `PUT /projects/{id}` |
+| `paymo_create_tasklist` | `project_id` (req), `name` (req), `seq?`, `milestone_id?` | `POST /tasklists` |
+| `paymo_update_tasklist` | `tasklist_id` (req), plus any of `name`, `seq`, `milestone_id` | `PUT /tasklists/{id}` |
 
 **Delete** — registered under `full` only.
 
@@ -213,6 +226,15 @@ are separate lookups.
 Where a `task` is expected, pass either a numeric **id** or a human **task code** (e.g. `ABC-1`).
 Where a `status` is expected, pass a numeric id or a slug alias such as `in_progress`; aliases are
 discovered from your workflow, overridable with `PAYMO_STATUS_ALIASES`.
+
+### Projects
+
+There is no project or tasklist delete tool on purpose: `DELETE /projects/{id}` destroys the
+project's tasks *and their time entries* — cascading, unrecoverable loss of billing data. Archive
+instead with `paymo_update_project` and `active: false`; that is why the tool accepts it. Milestones
+are not covered yet: `paymo_update_tasklist` accepts a `milestone_id` created in the Paymo UI.
+Creating a project from a `template_id` may copy the template's tasklists and tasks into the new
+project, and the created project is what comes back.
 
 ### Rich text
 

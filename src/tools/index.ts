@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ConfigError } from '../config.ts';
 import type { PermissionMode } from '../config.ts';
 import { contextTools } from './context.ts';
+import { projectsTools } from './projects.ts';
 import { tasksTools } from './tasks.ts';
 import { timeTools } from './time.ts';
 import type { ToolDef, ToolsContext } from './shared.ts';
@@ -15,6 +16,7 @@ export { respond } from './shared.ts';
  */
 export const TOOLS: Record<string, ToolDef> = {
   ...contextTools,
+  ...projectsTools,
   ...tasksTools,
   ...timeTools,
 };
@@ -26,6 +28,11 @@ export const TOOLSETS: Record<string, string[]> = {
     'paymo_create_task', 'paymo_update_task', 'paymo_add_comment',
   ],
   time: ['paymo_timer_status', 'paymo_start_timer', 'paymo_stop_timer', 'paymo_delete_entry'],
+  projects: [
+    'paymo_list_projects', 'paymo_list_tasklists',
+    'paymo_get_project', 'paymo_list_project_templates', 'paymo_list_project_statuses',
+    'paymo_create_project', 'paymo_update_project', 'paymo_create_tasklist', 'paymo_update_tasklist',
+  ],
 };
 
 /** Roughly v0.1.0's surface, so an existing user upgrading sees no change. */

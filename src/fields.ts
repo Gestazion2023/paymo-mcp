@@ -14,7 +14,9 @@ export type RecordKind =
   | 'taskSummary'
   | 'tasklist'
   | 'workflowstatus'
-  | 'entry';
+  | 'entry'
+  | 'projectTemplate'
+  | 'projectStatus';
 
 export const SUBSETS: Record<RecordKind, readonly string[]> = {
   user: [
@@ -23,7 +25,7 @@ export const SUBSETS: Record<RecordKind, readonly string[]> = {
   ],
   project: [
     'id', 'name', 'code', 'description', 'client_id', 'client_name', 'workflow_id',
-    'status_id', 'active', 'seq', 'created_on', 'updated_on',
+    'status_id', 'active', 'seq', 'budget_hours', 'billable', 'created_on', 'updated_on',
   ],
   // A listing exists to pick a record, a detail read to act on it. `projectSummary` is what a
   // caller needs to choose; the detail `project` subset above adds what acting needs.
@@ -47,6 +49,8 @@ export const SUBSETS: Record<RecordKind, readonly string[]> = {
     'id', 'task_id', 'user_id', 'project_id', 'start_time', 'end_time', 'duration',
     'description', 'billable',
   ],
+  projectTemplate: ['id', 'name', 'description'],
+  projectStatus: ['id', 'name', 'seq', 'active'],
 };
 
 /**

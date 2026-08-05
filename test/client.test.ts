@@ -198,3 +198,61 @@ test('deleteEntry issues a DELETE and tolerates an empty body', async () => {
     method: 'DELETE',
   });
 });
+
+test('generic list unwraps the plural key and returns an empty array when empty', async () => {
+  let url = '';
+  const client = makeClient((u) => {
+    url = u;
+    return new Response('{"projectstatuses":[]}');
+  });
+
+  assert.deepEqual(await client.list('projectstatuses', 'projectstatuses'), []);
+  assert.equal(url, 'https://app.paymoapp.com/api/projectstatuses');
+});
+
+test('generic list appends a where clause when given one', async () => {
+  let url = '';
+  const client = makeClient((u) => {
+    url = u;
+    return new Response('{"projects":[{"id":5}]}');
+  });
+
+  assert.deepEqual(await client.list('projects', 'projects', 'active=true'), [{ id: 5 }]);
+  assert.match(url, /where=active%3Dtrue/);
+});
+
+test('generic list reads the plural key even when it differs from the resource path', async () => {
+  const client = makeClient(() => new Response('{"project_templates":[{"id":9}]}'));
+
+  assert.deepEqual(await client.list('projecttemplates', 'project_templates'), [{ id: 9 }]);
+});
+
+test('generic one unwraps the first record and throws when the array is empty', async () => {
+  const ok = makeClient(() => new Response('{"projects":[{"id":7,"name":"x"}]}'));
+  assert.deepEqual(await ok.one('projects', 'projects', 7), { id: 7, name: 'x' });
+
+  const empty = makeClient(() => new Response('{"projects":[]}'));
+  await assert.rejects(() => empty.one('projects', 'projects', 7), /projects 7 not found/);
+});
+
+test('generic create and update POST/PUT JSON and unwrap the created record', async () => {
+  const seen: { method?: string; body?: string }[] = [];
+  const client = makeClient((_url, init) => {
+    seen.push({ method: init?.method, body: init?.body });
+    return new Response('{"projects":[{"id":1}]}');
+  });
+
+  assert.deepEqual(await client.create('projects', 'projects', { name: 'a' }), { id: 1 });
+  assert.deepEqual(await client.update('projects', 'projects', 1, { active: false }), { id: 1 });
+
+  assert.equal(seen[0]?.method, 'POST');
+  assert.equal(seen[0]?.body, '{"name":"a"}');
+  assert.equal(seen[1]?.method, 'PUT');
+  assert.equal(seen[1]?.body, '{"active":false}');
+});
+
+test('generic create throws when the response array is empty', async () => {
+  const client = makeClient(() => new Response('{"projects":[]}'));
+
+  await assert.rejects(() => client.create('projects', 'projects', { name: 'a' }), /created projects/);
+});

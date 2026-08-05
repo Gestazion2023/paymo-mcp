@@ -120,20 +120,20 @@ test('start_timer reports no previous entry when nothing was running', async () 
   assert.deepEqual(payloadOf(result), { started: { id: 2, task_id: 1234 }, previous_closed: null });
 });
 
-test('read-only mode registers the read tools only; full registers all 13', () => {
+test('read-only mode registers the read tools only; full registers all 20', () => {
   const readOnly = handlersFor({}, { permissionMode: 'readonly' });
   const full = handlersFor({}, { permissionMode: 'full' });
 
-  assert.equal(readOnly.size, 7);
-  assert.equal(full.size, 13);
+  assert.equal(readOnly.size, 10);
+  assert.equal(full.size, 20);
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
 });
 
-test('default mode registers 12 of 13 tools, everything except paymo_delete_entry', () => {
+test('default mode registers 19 of 20 tools, everything except paymo_delete_entry', () => {
   const handlers = handlersFor({});
 
-  assert.equal(handlers.size, 12);
+  assert.equal(handlers.size, 19);
   assert.equal(handlers.has('paymo_delete_entry'), false);
   assert.equal(handlers.has('paymo_stop_timer'), true);
   assert.equal(handlers.has('paymo_create_task'), true);
@@ -279,7 +279,8 @@ test('empty toolset selection resolves to the default toolsets (context, tasks, 
 test('the all keyword expands to every toolset', () => {
   const names = resolve({ toolsets: ['all'], mode: 'full' });
 
-  assert.equal(names.size, 13);
+  assert.equal(names.size, 20);
+  assert.equal(names.has('paymo_create_project'), true);
 });
 
 test('default is a keyword, so default,<toolset> adds instead of replacing', () => {
@@ -328,7 +329,7 @@ test('the deny regex subtracts last, even a tool explicitly named in PAYMO_TOOLS
   });
 
   assert.equal(names.has('paymo_create_task'), false);
-  assert.equal(names.size, 12);
+  assert.equal(names.size, 17);
 });
 
 test('permission mode wins over every explicit selection', () => {
@@ -416,4 +417,98 @@ test('a 429 on a young entry is reported as a rate limit, not as the sub-minute 
   assert.equal(result.isError, true);
   assert.match(text, /429/);
   assert.equal(text.includes('under a minute old'), false);
+});
+
+test('get_project returns the project detail subset', async () => {
+  const handlers = handlersFor({
+    project: async () => ({
+      id: 1234,
+      name: 'Site',
+      code: 'S',
+      budget_hours: 40,
+      billable: true,
+      invoiced: 12,
+    }),
+  });
+
+  const result = await handlers.get('paymo_get_project')!({ project_id: 1234, verbose: false });
+
+  assert.deepEqual(payloadOf(result), {
+    id: 1234,
+    name: 'Site',
+    code: 'S',
+    budget_hours: 40,
+    billable: true,
+  });
+});
+
+test('create_project forwards every create field, template_id included', async () => {
+  let captured: unknown;
+  const handlers = handlersFor({
+    createProject: async (data) => {
+      captured = data;
+      return { id: 1 };
+    },
+  });
+
+  const result = await handlers.get('paymo_create_project')!({
+    name: 'New',
+    code: 'N',
+    client_id: 5,
+    template_id: 9,
+    description: 'd',
+    budget_hours: 10,
+    billable: false,
+  });
+
+  assert.deepEqual(payloadOf(result), { id: 1 });
+  assert.deepEqual(captured, {
+    name: 'New',
+    code: 'N',
+    client_id: 5,
+    template_id: 9,
+    description: 'd',
+    budget_hours: 10,
+    billable: false,
+  });
+});
+
+test('update_project forwards active and status_id as the archive path', async () => {
+  let captured: unknown;
+  const handlers = handlersFor({
+    updateProject: async (_id, data) => {
+      captured = data;
+      return { id: 1, active: false };
+    },
+  });
+
+  await handlers.get('paymo_update_project')!({ project_id: 1, active: false, status_id: 3 });
+
+  assert.deepEqual(captured, { active: false, status_id: 3 });
+});
+
+test('create_tasklist requires a project_id and name and forwards optional fields', async () => {
+  let captured: unknown;
+  const handlers = handlersFor({
+    createTasklist: async (data) => {
+      captured = data;
+      return { id: 1 };
+    },
+  });
+
+  await handlers.get('paymo_create_tasklist')!({ project_id: 1234, name: 'Backlog', seq: 0 });
+
+  assert.deepEqual(captured, { project_id: 1234, name: 'Backlog', seq: 0 });
+});
+
+test('the projects toolset registers its reads under readonly and all nine under modify', () => {
+  const registered = new Set(TOOLSETS.projects);
+  const readOnly = handlersFor({}, { permissionMode: 'readonly', registeredTools: registered });
+  const modify = handlersFor({}, { permissionMode: 'modify', registeredTools: registered });
+
+  assert.equal(readOnly.size, 5);
+  assert.equal(modify.size, 9);
+  assert.equal(readOnly.has('paymo_update_project'), false);
+  assert.equal(readOnly.has('paymo_get_project'), true);
+  assert.equal(modify.has('paymo_create_project'), true);
 });

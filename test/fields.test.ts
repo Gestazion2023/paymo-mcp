@@ -144,3 +144,48 @@ test('projectSummary drops the heavy detail fields a listing does not need', () 
     client_name: 'Acme',
   });
 });
+
+test('projectTemplate subset keeps id, name and description', () => {
+  const template = { id: 1234, name: 'Web', description: 'a template', budget_hours: 40 };
+
+  assert.deepEqual(filterRecord(template, 'projectTemplate', false), {
+    id: 1234,
+    name: 'Web',
+    description: 'a template',
+  });
+});
+
+test('projectStatus subset keeps id, name, seq and active, dropping readonly', () => {
+  const status = {
+    id: 1234,
+    name: 'On-hold',
+    active: false,
+    seq: 2,
+    readonly: false,
+    created_on: '2017-07-13T03:36:22Z',
+  };
+
+  assert.deepEqual(filterRecord(status, 'projectStatus', false), {
+    id: 1234,
+    name: 'On-hold',
+    active: false,
+    seq: 2,
+  });
+});
+
+test('project subset exposes budget_hours and billable now that write tools accept them', () => {
+  const project = {
+    id: 1234,
+    name: 'X',
+    budget_hours: 40,
+    billable: true,
+    invoiced: 12,
+  };
+
+  assert.deepEqual(filterRecord(project, 'project', false), {
+    id: 1234,
+    name: 'X',
+    budget_hours: 40,
+    billable: true,
+  });
+});
