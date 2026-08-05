@@ -252,6 +252,12 @@ are not covered yet: `paymo_update_tasklist` accepts a `milestone_id` created in
 Creating a project from a `template_id` may copy the template's tasklists and tasks into the new
 project, and the created project is what comes back.
 
+The project and tasklist **writes are unverified live**: the account this package was developed
+against uses an Employee key, and Paymo answers `POST /projects` with a 403. The reads are verified
+against a real account; the writes are covered by stub-client unit tests and await a human-run
+verification pass with an administrator key. `template_id` is doubly unverified — that account has
+no project templates.
+
 ### Clients
 
 There is no client or client-contact delete tool on purpose: `DELETE /clients/{id}` destroys every
@@ -279,12 +285,13 @@ is. Automated invoicing was never a requirement; reading state to answer "has th
 If invoicing writes are ever needed, that is a separate, separately-argued addition built after the
 admin verification pass.
 
-The `billing` reads (invoices, estimates, invoice templates) return 403 on the package's example
-account — `{"message":"Listing invoices denied"}` — which points at the account's plan tier not
-granting invoicing reads to this key. So those reads are **unverified live** and covered by
-stub-client unit tests instead; `paymo_list_invoice_payments` is readable (the account has none
-yet) and `paymo_get_estimate` reaches Paymo's estimate lookup. These denials are §19's documented
-outcome for a plan tier without invoicing, not a bug in the requests.
+The `billing` reads (invoices, estimates, invoice templates) return 403 on the account this package
+was developed against — `{"message":"Listing invoices denied"}`. That is the **account role**, not
+the plan: the same account reports a six-figure invoice allowance, and an Employee simply cannot read
+company invoices. An Administrator key reads them. So those reads are **unverified live** and covered
+by stub-client unit tests instead; `paymo_list_invoice_payments` is readable and
+`paymo_get_estimate` reaches Paymo's estimate lookup. If these 403 for you, check the role of the
+key before suspecting the request.
 
 ### Rich text
 
