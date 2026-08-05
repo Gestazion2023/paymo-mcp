@@ -49,21 +49,117 @@ Environment variables read by `paymo-mcp`:
 | `PAYMO_BASE_URL` | no | `https://app.paymoapp.com/api` | API base URL. |
 | `PAYMO_DEFAULT_PROJECT_ID` | no | — | Project used when a project id argument is omitted. |
 | `PAYMO_STATUS_ALIASES` | no | discovered automatically | JSON object overriding status aliases, e.g. `{"wip":123,"done":456}`. Keys are slugified, values must be positive integers. |
-| `PAYMO_READ_ONLY` | no | `false` | Registers only the read tools. Accepts `1`/`true`/`yes`/`on` and their negatives. |
+| `PAYMO_TOOLSETS` | no | `default` | Comma-separated toolset names, plus the keywords `default` and `all`. Case-insensitive and whitespace-tolerant. |
+| `PAYMO_TOOLS` | no | — | Comma-separated tool names, additive on top of the toolsets. Matched exactly as registered. |
+| `PAYMO_DENIED_TOOLS_REGEX` | no | — | One JS regex, matched against tool names and subtracted from the resolved set last. |
+| `PAYMO_PERMISSION_MODE` | no | `modify` | One of `readonly`, `modify`, `full` — see below. |
+| `PAYMO_READ_ONLY` | no | — | **Deprecated.** Use `PAYMO_PERMISSION_MODE`. `true` maps to `readonly`, `false` to `modify`. |
 
 An unusable value in any of these aborts startup with an error instead of falling back to a default:
-a `PAYMO_READ_ONLY` typo that silently granted write access would be worse than a server that
-refuses to boot.
+a typo that silently granted write access would be worse than a server that refuses to boot. Setting
+both `PAYMO_PERMISSION_MODE` and `PAYMO_READ_ONLY` also aborts — drop the deprecated one rather than
+guessing which variable won.
+
+### Toolsets
+
+| Toolset | Covers | Tools |
+|---|---|---|
+| `context` | `paymo_me`, `paymo_list_workflow_statuses` — who am I, what statuses exist | 2 |
+| `tasks` | tasks, tasklists (read), comments, subtasks | 7 |
+| `time` | time entries: timer control, manual logging, deletion | 4 |
+| `all` | every toolset above | 13 |
+
+`default` = `context` + `tasks` + `time`, which is approximately the surface the package exposed
+before toolsets existed — an existing user upgrading sees no change. Names are additive and
+order-independent, so `PAYMO_TOOLSETS=default,billing` would mean defaults *plus* billing.
+
+### How the tool set is resolved
+
+1. `PAYMO_TOOLSETS` expands to a set of tool names (`default` → the default toolsets; `all` → every
+   toolset; names are additive).
+2. `PAYMO_TOOLS` is unioned in.
+3. `PAYMO_DENIED_TOOLS_REGEX` is subtracted.
+4. `PAYMO_PERMISSION_MODE` filters last — never overridable by naming a tool explicitly.
+
+The resolved set is fixed at startup and never changes mid-session. Changing any of these variables
+requires restarting the MCP client; a fixed `tools` array is what keeps the prompt cache valid.
+
+### Permission modes
+
+| Mode | Registers |
+|---|---|
+| `readonly` | reads only |
+| `modify` | reads + create/update; **all delete tools omitted** |
+| `full` | everything, deletes included |
+
+`modify` is the default: an MCP server handing a model an API key with full account access should not
+delete by default. `paymo_delete_entry` is the only delete tool, and it exists because Paymo refuses
+to set an `end_time` on an entry under a minute old — such a timer can only be closed by deleting it.
+It therefore requires `PAYMO_PERMISSION_MODE=full`; under `modify`, `paymo_stop_timer`'s error names
+that requirement instead of leaving you at a dead end.
+
+### Examples
+
+Defaults — read and write, no deletes:
+
+```json
+{
+  "mcpServers": {
+    "paymo": {
+      "command": "npx",
+      "args": ["-y", "paymo-mcp"],
+      "env": {
+        "PAYMO_API_KEY": "your-key-here"
+      }
+    }
+  }
+}
+```
+
+A single toolset — just identity and workflow statuses:
+
+```json
+{
+  "mcpServers": {
+    "paymo": {
+      "command": "npx",
+      "args": ["-y", "paymo-mcp"],
+      "env": {
+        "PAYMO_API_KEY": "your-key-here",
+        "PAYMO_TOOLSETS": "context"
+      }
+    }
+  }
+}
+```
+
+A single-tool allowlist — the context toolset plus exactly one write tool:
+
+```json
+{
+  "mcpServers": {
+    "paymo": {
+      "command": "npx",
+      "args": ["-y", "paymo-mcp"],
+      "env": {
+        "PAYMO_API_KEY": "your-key-here",
+        "PAYMO_TOOLSETS": "context",
+        "PAYMO_TOOLS": "paymo_create_task"
+      }
+    }
+  }
+}
+```
 
 ## Getting an API key
 
 Your Paymo API key grants **full read and write access to your Paymo account**. Get it from your
-Paymo account settings. Unless you need to create or mutate data, set `PAYMO_READ_ONLY=true` — an
-accident with a write tool is much harder to undo than a wrong read.
+Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PERMISSION_MODE=readonly`
+— an accident with a write tool is much harder to undo than a wrong read.
 
 ## Tools
 
-**Read (always available)**
+**Read** — registered in every permission mode, subject to the selected toolsets.
 
 | Tool | Args | Endpoint |
 |---|---|---|
@@ -75,7 +171,7 @@ accident with a write tool is much harder to undo than a wrong read.
 | `paymo_list_workflow_statuses` | `limit?`, `offset?`, `verbose?` | `GET /workflowstatuses` |
 | `paymo_timer_status` | `verbose?` | `GET /entries?where=end_time=null and user_id={me}` |
 
-**Write (skipped when `PAYMO_READ_ONLY=true`)**
+**Write** — registered under `modify` and `full`.
 
 | Tool | Args | Endpoint |
 |---|---|---|
@@ -84,11 +180,17 @@ accident with a write tool is much harder to undo than a wrong read.
 | `paymo_add_comment` | `task` (req), `content` (req) | `POST /comments` |
 | `paymo_start_timer` | `task` (req) | `POST /entries` |
 | `paymo_stop_timer` | — | `PUT /entries/{id}` |
+
+**Delete** — registered under `full` only.
+
+| Tool | Args | Endpoint |
+|---|---|---|
 | `paymo_delete_entry` | `entry_id` (req) | `DELETE /entries/{id}` |
 
 A timer that ran for under a minute cannot be stopped: Paymo rejects an `end_time` that would make
 the entry shorter than that. Delete it with `paymo_delete_entry` instead — that is the documented
-way out, and the only reason this package ships a delete tool at all.
+way out, and the only reason this package ships a delete tool at all. Because `full` is not the
+default, the stop error names that requirement when the tool is not registered.
 
 ### Response size
 

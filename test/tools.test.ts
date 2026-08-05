@@ -5,19 +5,31 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { PaymoClient } from '../src/client.ts';
 import { PaymoHttpError } from '../src/client.ts';
+import type { PermissionMode } from '../src/config.ts';
 import { StatusResolver } from '../src/statuses.ts';
-import { registerTools } from '../src/tools/index.ts';
+import { registerTools, resolveTools } from '../src/tools/index.ts';
 import { TOOLS, TOOLSETS } from '../src/tools/index.ts';
 import { respond } from '../src/tools/shared.ts';
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>;
 
+interface HarnessOverrides {
+  permissionMode?: PermissionMode;
+  registeredTools?: ReadonlySet<string>;
+}
+
 /**
  * Collects the registered handlers so a tool can be invoked without a transport. Arguments are
  * parsed through the tool's own zod schema first, exactly as the SDK does — otherwise `.default()`
  * values never apply and a wrong default is invisible to every test here.
+ *
+ * Registered tools default to the whole registry; `permissionMode` controls which of them survive
+ * `registerTools`, mirroring how `resolveTools` + `registerTools` behave at startup. Override
+ * `registeredTools` when a test needs a particular tool absent regardless of the permission mode.
  */
-function handlersFor(client: Partial<PaymoClient>, readOnly = false): Map<string, Handler> {
+function handlersFor(client: Partial<PaymoClient>, overrides: HarnessOverrides = {}): Map<string, Handler> {
+  const permissionMode = overrides.permissionMode ?? 'modify';
+  const registeredTools = overrides.registeredTools ?? new Set(Object.keys(TOOLS));
   const handlers = new Map<string, Handler>();
   const server = {
     registerTool: (
@@ -35,10 +47,25 @@ function handlersFor(client: Partial<PaymoClient>, readOnly = false): Map<string
     client: client as PaymoClient,
     resolver: new StatusResolver(),
     defaultProjectId: null,
-    readOnly,
+    permissionMode,
+    registeredTools,
   });
 
   return handlers;
+}
+
+function resolve(config: {
+  toolsets?: string[];
+  tools?: string[];
+  denied?: RegExp | null;
+  mode?: PermissionMode;
+}): Set<string> {
+  return resolveTools({
+    toolsets: config.toolsets ?? [],
+    tools: config.tools ?? [],
+    deniedToolsRegex: config.denied ?? null,
+    permissionMode: config.mode ?? 'modify',
+  });
 }
 
 function payloadOf(result: CallToolResult): unknown {
@@ -93,14 +120,23 @@ test('start_timer reports no previous entry when nothing was running', async () 
   assert.deepEqual(payloadOf(result), { started: { id: 2, task_id: 1234 }, previous_closed: null });
 });
 
-test('read-only mode registers the read tools only', () => {
-  const readOnly = handlersFor({}, true);
-  const readWrite = handlersFor({}, false);
+test('read-only mode registers the read tools only; full registers all 13', () => {
+  const readOnly = handlersFor({}, { permissionMode: 'readonly' });
+  const full = handlersFor({}, { permissionMode: 'full' });
 
   assert.equal(readOnly.size, 7);
-  assert.equal(readWrite.size, 13);
+  assert.equal(full.size, 13);
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
+});
+
+test('default mode registers 12 of 13 tools, everything except paymo_delete_entry', () => {
+  const handlers = handlersFor({});
+
+  assert.equal(handlers.size, 12);
+  assert.equal(handlers.has('paymo_delete_entry'), false);
+  assert.equal(handlers.has('paymo_stop_timer'), true);
+  assert.equal(handlers.has('paymo_create_task'), true);
 });
 
 test('every toolset entry names a tool that exists in the registry', () => {
@@ -229,4 +265,137 @@ test('list tools cap the response at 50 records unless a larger limit is asked f
     verbose: false,
   });
   assert.equal((payloadOf(raised) as unknown[]).length, 120);
+});
+
+test('empty toolset selection resolves to the default toolsets (context, tasks, time)', () => {
+  const names = resolve({ mode: 'full' });
+
+  assert.equal(names.size, 13);
+  assert.equal(names.has('paymo_me'), true);
+  assert.equal(names.has('paymo_create_task'), true);
+  assert.equal(names.has('paymo_delete_entry'), true);
+});
+
+test('the all keyword expands to every toolset', () => {
+  const names = resolve({ toolsets: ['all'], mode: 'full' });
+
+  assert.equal(names.size, 13);
+});
+
+test('default is a keyword, so default,<toolset> adds instead of replacing', () => {
+  const names = resolve({ toolsets: ['default', 'context'], mode: 'full' });
+
+  assert.equal(names.size, 13);
+});
+
+test('toolset names are additive, case-insensitive and whitespace-tolerant', () => {
+  const context = resolve({ toolsets: ['context'], mode: 'full' });
+
+  assert.deepEqual([...context].sort(), ['paymo_list_workflow_statuses', 'paymo_me']);
+
+  const timeAndContext = resolve({ toolsets: [' time ', 'CONTEXT'], mode: 'full' });
+
+  assert.equal(timeAndContext.size, 6);
+  assert.equal(timeAndContext.has('paymo_start_timer'), true);
+  assert.equal(timeAndContext.has('paymo_me'), true);
+});
+
+test('an unknown toolset aborts and lists the valid values', () => {
+  assert.throws(
+    () => resolve({ toolsets: ['billing'] }),
+    /Unknown toolset 'billing'.*Valid toolsets:.*context/,
+  );
+});
+
+test('PAYMO_TOOLS unions in a tool from an unselected toolset', () => {
+  const names = resolve({ toolsets: ['context'], tools: ['paymo_delete_entry'], mode: 'full' });
+
+  assert.equal(names.has('paymo_delete_entry'), true);
+  assert.equal(names.has('paymo_me'), true);
+  assert.equal(names.has('paymo_list_tasks'), false);
+});
+
+test('an unknown PAYMO_TOOLS name aborts and lists the valid values', () => {
+  assert.throws(() => resolve({ tools: ['paymo_nope'] }), /Unknown tool 'paymo_nope'.*Valid tools:/);
+});
+
+test('the deny regex subtracts last, even a tool explicitly named in PAYMO_TOOLS', () => {
+  const names = resolve({
+    toolsets: ['all'],
+    tools: ['paymo_create_task'],
+    denied: /^paymo_create/,
+    mode: 'full',
+  });
+
+  assert.equal(names.has('paymo_create_task'), false);
+  assert.equal(names.size, 12);
+});
+
+test('permission mode wins over every explicit selection', () => {
+  const readonly = resolve({ tools: ['paymo_update_task'], mode: 'readonly' });
+  const modify = resolve({ tools: ['paymo_delete_entry'], mode: 'modify' });
+  const full = resolve({ tools: ['paymo_update_task', 'paymo_delete_entry'], mode: 'full' });
+
+  assert.equal(readonly.has('paymo_update_task'), false);
+  assert.equal(modify.has('paymo_delete_entry'), false);
+  assert.equal(full.has('paymo_update_task'), true);
+  assert.equal(full.has('paymo_delete_entry'), true);
+});
+
+test('a selection that resolves to no tools aborts', () => {
+  assert.throws(() => resolve({ denied: /./ }), /resolved to no tools/);
+});
+
+test('stop_timer names paymo_delete_entry and its mode when the sub-minute stop fails', async () => {
+  const subMinute = new Date(Date.now() - 30_000).toISOString();
+  const handlers = handlersFor({
+    currentUserId: async () => 9,
+    runningEntry: async () => ({ id: 1, start_time: subMinute, end_time: null, duration: 0 }),
+    stopEntry: async () => {
+      throw new PaymoHttpError(400, '{"error":"refused"}');
+    },
+  });
+
+  const result = await handlers.get('paymo_stop_timer')!({});
+  const text = (result.content?.[0] as { text: string }).text;
+
+  assert.equal(result.isError, true);
+  assert.match(text, /under a minute old/);
+  assert.match(text, /paymo_delete_entry/);
+  assert.match(text, /PAYMO_PERMISSION_MODE=full/);
+});
+
+test('stop_timer leaves the raw error alone when paymo_delete_entry is registered', async () => {
+  const subMinute = new Date(Date.now() - 30_000).toISOString();
+  const handlers = handlersFor({
+    currentUserId: async () => 9,
+    runningEntry: async () => ({ id: 1, start_time: subMinute, end_time: null, duration: 0 }),
+    stopEntry: async () => {
+      throw new PaymoHttpError(400, '{"error":"refused"}');
+    },
+  }, { permissionMode: 'full' });
+
+  const result = await handlers.get('paymo_stop_timer')!({});
+  const text = (result.content?.[0] as { text: string }).text;
+
+  assert.equal(result.isError, true);
+  assert.equal(text.includes('paymo_delete_entry'), false);
+  assert.match(text, /refused/);
+});
+
+test('stop_timer does not blame the minute rule when the entry is not sub-minute', async () => {
+  const tenMinutesAgo = new Date(Date.now() - 600_000).toISOString();
+  const handlers = handlersFor({
+    currentUserId: async () => 9,
+    runningEntry: async () => ({ id: 1, start_time: tenMinutesAgo, end_time: null, duration: 600 }),
+    stopEntry: async () => {
+      throw new PaymoHttpError(400, '{"error":"refused"}');
+    },
+  });
+
+  const result = await handlers.get('paymo_stop_timer')!({});
+  const text = (result.content?.[0] as { text: string }).text;
+
+  assert.equal(text.includes('paymo_delete_entry'), false);
+  assert.match(text, /refused/);
 });

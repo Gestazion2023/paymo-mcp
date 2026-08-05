@@ -1,7 +1,25 @@
 import { z } from 'zod';
+import type { PaymoRecord } from '../client.ts';
 import { filterRecord } from '../fields.ts';
 import { respond, taskIdentifier, verbose } from './shared.ts';
 import type { ToolDef } from './shared.ts';
+
+/**
+ * Paymo refuses to set an `end_time` that would make an entry shorter than a minute, so a timer
+ * under a minute old can only be closed by deleting it. True when the entry started less than a
+ * minute ago, which is the case the API rejects.
+ */
+function isSubMinute(entry: PaymoRecord): boolean {
+  const start = entry.start_time;
+
+  if (typeof start !== 'string') {
+    return false;
+  }
+
+  const startedAt = Date.parse(start);
+
+  return !Number.isNaN(startedAt) && Date.now() - startedAt < 60_000;
+}
 
 export const timeTools: Record<string, ToolDef> = {
   paymo_timer_status: {
@@ -72,7 +90,21 @@ export const timeTools: Record<string, ToolDef> = {
           return { stopped: null, message: 'No running timer for the current user.' };
         }
 
-        return { stopped: await ctx.client.stopEntry(running.id) };
+        try {
+          return { stopped: await ctx.client.stopEntry(running.id) };
+        } catch (err) {
+          // The default `modify` mode drops paymo_delete_entry, so a caller that hits the
+          // sub-minute rejection under the default configuration walks into a dead end unless the
+          // error names the way out and the mode that provides it.
+          if (isSubMinute(running) && !ctx.registeredTools.has('paymo_delete_entry')) {
+            throw new Error(
+              'Paymo refuses to stop an entry under a minute old. Delete it with paymo_delete_entry, '
+              + 'which requires PAYMO_PERMISSION_MODE=full.',
+            );
+          }
+
+          throw err;
+        }
       }),
   },
 };

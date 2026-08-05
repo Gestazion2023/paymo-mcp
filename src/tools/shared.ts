@@ -1,6 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { PaymoClient } from '../client.ts';
+import type { PermissionMode } from '../config.ts';
 import type { StatusResolver } from '../statuses.ts';
 
 export type ToolLevel = 'read' | 'write' | 'delete';
@@ -9,7 +10,13 @@ export interface ToolsContext {
   client: PaymoClient;
   resolver: StatusResolver;
   defaultProjectId: number | null;
-  readOnly: boolean;
+  permissionMode: PermissionMode;
+  /**
+   * The tools actually registered, resolved once at startup and never changed mid-session. A tool
+   * needs it to know what else the caller can do — e.g. `paymo_stop_timer` pointing at
+   * `paymo_delete_entry` as the way out of the sub-minute rule only when that tool is registered.
+   */
+  registeredTools: ReadonlySet<string>;
 }
 
 /**
