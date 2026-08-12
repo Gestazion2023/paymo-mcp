@@ -104,6 +104,35 @@ export const tasksTools: Record<string, ToolDef> = {
       }),
   },
 
+  paymo_list_comments: {
+    level: 'read',
+    description:
+      'Read the comment thread of a Paymo task, oldest first. Call it to catch up on the '
+      + 'discussion before answering with paymo_add_comment.',
+    inputSchema: {
+      task: taskIdentifier,
+      limit,
+      offset,
+      verbose,
+    },
+    handler: (args: { task: string; limit: number; offset: number; verbose: boolean }, ctx) =>
+      respond('list comments', async () => {
+        const id = await ctx.client.resolveTaskId(args.task);
+        const records = await ctx.client.comments(id);
+        // A conversation reads oldest first, and Paymo documents no ordering on /comments, so the
+        // order is imposed here rather than trusted. `created_on` is the ISO timestamp Paymo
+        // returns, comparable as a string; the id breaks ties within the same second.
+        const ordered = [...records].sort((a, b) => {
+          const written = String(a.created_on ?? '').localeCompare(String(b.created_on ?? ''));
+
+          return written === 0 ? Number(a.id ?? 0) - Number(b.id ?? 0) : written;
+        });
+        const filtered = ordered.map((record) => filterRecord(record, 'comment', args.verbose));
+
+        return paginate(filtered, args.limit, args.offset);
+      }),
+  },
+
   paymo_create_task: {
     level: 'write',
     description:
@@ -218,5 +247,19 @@ export const tasksTools: Record<string, ToolDef> = {
         const id = await ctx.client.resolveTaskId(args.task);
         return ctx.client.addComment(id, args.content);
       }),
+  },
+
+  paymo_update_comment: {
+    level: 'write',
+    description:
+      'Rewrite an existing Paymo comment, replacing its whole body. There is no delete tool for '
+      + 'comments, so this is the only way to correct one — get the comment_id from '
+      + 'paymo_list_comments.',
+    inputSchema: {
+      comment_id: z.number().int().describe('Paymo comment id, as returned by paymo_list_comments.'),
+      content: z.string().describe(`New comment text, replacing the previous body. ${RICH_TEXT}`),
+    },
+    handler: (args: { comment_id: number; content: string }, ctx) =>
+      respond('update comment', () => ctx.client.updateComment(args.comment_id, args.content)),
   },
 };

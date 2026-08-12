@@ -65,12 +65,12 @@ guessing which variable won.
 | Toolset | Covers | Tools | Schema cost (chars) |
 |---|---|---|---|
 | `context` | `paymo_me`, `paymo_list_workflow_statuses` — who am I, what statuses exist | 2 | 1,008 |
-| `tasks` | tasks, tasklists (read), comments, subtasks | 7 | 5,453 |
+| `tasks` | tasks, tasklists (read), comments (read and write), subtasks | 9 | 6,796 |
 | `time` | time entries: timer control, manual logging, deletion | 4 | 876 |
 | `projects` | project CRUD, project templates, project statuses, tasklists (write) — milestones deferred | 9 | 5,794 |
 | `clients` | client CRUD (no delete), client contacts, company — portal access included | 8 | 6,136 |
 | `billing` | invoices, invoice payments, estimates, invoice templates — **read-only, deliberately** | 6 | 4,124 |
-| `all` | every toolset above | 34 | 21,791 |
+| `all` | every toolset above | 36 | 23,134 |
 
 `default` = `context` + `tasks` + `time`, which is approximately the surface the package exposed
 before toolsets existed — an existing user upgrading sees no change. Names are additive and
@@ -176,6 +176,7 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_list_tasklists` | `project_id?: number`, `limit?`, `offset?`, `verbose?` | `GET /tasklists?where=project_id=…` |
 | `paymo_list_tasks` | `project_id?: number`, `include_completed?: boolean`, `limit?`, `offset?`, `verbose?` | `GET /tasks?where=…` |
 | `paymo_get_task` | `task: string` (id or code), `verbose?` | `GET /tasks/{id}` |
+| `paymo_list_comments` | `task: string` (id or code), `limit?`, `offset?`, `verbose?` | `GET /comments?where=task_id=…` |
 | `paymo_list_workflow_statuses` | `limit?`, `offset?`, `verbose?` | `GET /workflowstatuses` |
 | `paymo_timer_status` | `verbose?` | `GET /entries?where=end_time=null and user_id={me}` |
 | `paymo_get_project` | `project_id` (req), `verbose?` | `GET /projects/{id}` |
@@ -199,6 +200,7 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_create_task` | `name` (req), `project_id?`, `tasklist_id?`, `description?`, `due_date?`, `priority?`, `users?: number[]` | `POST /tasks` |
 | `paymo_update_task` | `task` (req), plus any of `name`, `description`, `due_date`, `priority`, `users`, `complete`, `status` | `PUT /tasks/{id}` |
 | `paymo_add_comment` | `task` (req), `content` (req) | `POST /comments` |
+| `paymo_update_comment` | `comment_id` (req), `content` (req) | `PUT /comments/{id}` |
 | `paymo_start_timer` | `task` (req) | `POST /entries` |
 | `paymo_stop_timer` | — | `PUT /entries/{id}` |
 | `paymo_create_project` | `name` (req), `code?`, `client_id?`, `template_id?`, `description?`, `budget_hours?`, `billable?` | `POST /projects` |
@@ -292,6 +294,24 @@ company invoices. An Administrator key reads them. So those reads are **unverifi
 by stub-client unit tests instead; `paymo_list_invoice_payments` is readable and
 `paymo_get_estimate` reaches Paymo's estimate lookup. If these 403 for you, check the role of the
 key before suspecting the request.
+
+### Comments
+
+A comment is a resource of its own, not a field of the task, so the thread is read with
+`paymo_list_comments` (filtered by task, accepting the same numeric id or human code as every other
+task argument) rather than through `paymo_get_task`. The listing is returned **oldest first**: a
+conversation reads in the order it was written, and Paymo documents no ordering on `/comments`, so
+the server imposes it by `created_on`, breaking ties by id.
+
+There is no comment delete tool, for the same reason the other toolsets ship none. `PUT /comments`
+replaces the body wholesale, so `paymo_update_comment` is the repair path for a comment posted with
+the wrong markup — pass the `comment_id` from the listing and the full new body, not a patch.
+
+Both tools are **unverified live**: the change that added them was not allowed to call the real API,
+so they are covered by stub-client unit tests only. `scripts/field-diff.mjs` has not been run for the
+`comment` record kind either — the non-verbose subset carries the fields Paymo documents (`id`,
+`task_id`, `thread_id`, `reply_id`, `user_id`, `content`, `created_on`, `updated_on`), and anything
+returned beyond those is dropped unseen. Pass `verbose: true` if you need to check.
 
 ### Rich text
 

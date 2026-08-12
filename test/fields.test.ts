@@ -145,6 +145,32 @@ test('projectSummary drops the heavy detail fields a listing does not need', () 
   });
 });
 
+test('comment subset keeps the author, the body and the threading fields', () => {
+  const comment = {
+    id: 1234,
+    task_id: 5678,
+    thread_id: 90,
+    reply_id: null,
+    user_id: 11,
+    content: '<p>looks good</p>',
+    created_on: '2026-08-01T09:00:00Z',
+    updated_on: '2026-08-01T09:05:00Z',
+    seen_by: [11, 22],
+    attachments: [],
+  };
+
+  assert.deepEqual(filterRecord(comment, 'comment', false), {
+    id: 1234,
+    task_id: 5678,
+    thread_id: 90,
+    reply_id: null,
+    user_id: 11,
+    content: '<p>looks good</p>',
+    created_on: '2026-08-01T09:00:00Z',
+    updated_on: '2026-08-01T09:05:00Z',
+  });
+});
+
 test('projectTemplate subset keeps id, name and description', () => {
   const template = { id: 1234, name: 'Web', description: 'a template', budget_hours: 40 };
 

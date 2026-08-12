@@ -120,20 +120,20 @@ test('start_timer reports no previous entry when nothing was running', async () 
   assert.deepEqual(payloadOf(result), { started: { id: 2, task_id: 1234 }, previous_closed: null });
 });
 
-test('read-only mode registers the read tools only; full registers all 34', () => {
+test('read-only mode registers the read tools only; full registers all 36', () => {
   const readOnly = handlersFor({}, { permissionMode: 'readonly' });
   const full = handlersFor({}, { permissionMode: 'full' });
 
-  assert.equal(readOnly.size, 20);
-  assert.equal(full.size, 34);
+  assert.equal(readOnly.size, 21);
+  assert.equal(full.size, 36);
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
 });
 
-test('default mode registers 33 of 34 tools, everything except paymo_delete_entry', () => {
+test('default mode registers 35 of 36 tools, everything except paymo_delete_entry', () => {
   const handlers = handlersFor({});
 
-  assert.equal(handlers.size, 33);
+  assert.equal(handlers.size, 35);
   assert.equal(handlers.has('paymo_delete_entry'), false);
   assert.equal(handlers.has('paymo_stop_timer'), true);
   assert.equal(handlers.has('paymo_create_task'), true);
@@ -225,6 +225,136 @@ test('list_tasks returns the task summary, keeping users and dropping descriptio
   }]);
 });
 
+test('list_comments resolves the task code and returns the thread oldest first', async () => {
+  let requestedTask: number | null = null;
+  const handlers = handlersFor({
+    resolveTaskId: async () => 1234,
+    comments: async (taskId) => {
+      requestedTask = taskId;
+      return [
+        {
+          id: 22,
+          task_id: 1234,
+          thread_id: 7,
+          reply_id: 21,
+          user_id: 9,
+          content: '<p>second</p>',
+          created_on: '2026-08-02T09:00:00Z',
+          updated_on: '2026-08-02T09:00:00Z',
+          seen_by: [9, 11],
+        },
+        {
+          id: 21,
+          task_id: 1234,
+          thread_id: 7,
+          reply_id: null,
+          user_id: 11,
+          content: '<p>first</p>',
+          created_on: '2026-08-01T09:00:00Z',
+          updated_on: '2026-08-01T09:00:00Z',
+          seen_by: [9, 11],
+        },
+      ];
+    },
+  });
+
+  const result = await handlers.get('paymo_list_comments')!({
+    task: 'ABC-1',
+    limit: 10,
+    offset: 0,
+    verbose: false,
+  });
+
+  assert.equal(requestedTask, 1234);
+  assert.deepEqual(payloadOf(result), [
+    {
+      id: 21,
+      task_id: 1234,
+      thread_id: 7,
+      reply_id: null,
+      user_id: 11,
+      content: '<p>first</p>',
+      created_on: '2026-08-01T09:00:00Z',
+      updated_on: '2026-08-01T09:00:00Z',
+    },
+    {
+      id: 22,
+      task_id: 1234,
+      thread_id: 7,
+      reply_id: 21,
+      user_id: 9,
+      content: '<p>second</p>',
+      created_on: '2026-08-02T09:00:00Z',
+      updated_on: '2026-08-02T09:00:00Z',
+    },
+  ]);
+});
+
+test('list_comments breaks a same-timestamp tie by id and honors limit and offset', async () => {
+  const sameSecond = '2026-08-01T09:00:00Z';
+  const handlers = handlersFor({
+    resolveTaskId: async () => 1234,
+    comments: async () => [
+      { id: 3, content: 'c', created_on: sameSecond },
+      { id: 1, content: 'a', created_on: sameSecond },
+      { id: 2, content: 'b', created_on: sameSecond },
+    ],
+  });
+
+  const result = await handlers.get('paymo_list_comments')!({
+    task: '1234',
+    limit: 2,
+    offset: 1,
+    verbose: false,
+  });
+
+  assert.deepEqual(payloadOf(result), [
+    { id: 2, content: 'b', created_on: sameSecond },
+    { id: 3, content: 'c', created_on: sameSecond },
+  ]);
+});
+
+test('list_comments verbose returns each raw comment untouched', async () => {
+  const raw = { id: 1, content: 'a', created_on: '2026-08-01T09:00:00Z', seen_by: [9] };
+  const handlers = handlersFor({ resolveTaskId: async () => 1234, comments: async () => [raw] });
+
+  const result = await handlers.get('paymo_list_comments')!({
+    task: '1234',
+    limit: 5,
+    offset: 0,
+    verbose: true,
+  });
+
+  assert.deepEqual(payloadOf(result), [raw]);
+});
+
+test('update_comment sends the new body for the comment id and returns the updated record', async () => {
+  let captured: { id?: number; content?: string } = {};
+  const handlers = handlersFor({
+    updateComment: async (commentId, content) => {
+      captured = { id: commentId, content };
+      return { id: commentId, content };
+    },
+  });
+
+  const result = await handlers.get('paymo_update_comment')!({
+    comment_id: 21,
+    content: '<p>corrected</p>',
+  });
+
+  assert.deepEqual(captured, { id: 21, content: '<p>corrected</p>' });
+  assert.deepEqual(payloadOf(result), { id: 21, content: '<p>corrected</p>' });
+});
+
+test('the comment tools split across the permission gate: list is a read, update is a write', () => {
+  const readOnly = handlersFor({}, { permissionMode: 'readonly' });
+  const modify = handlersFor({}, { permissionMode: 'modify' });
+
+  assert.equal(readOnly.has('paymo_list_comments'), true);
+  assert.equal(readOnly.has('paymo_update_comment'), false);
+  assert.equal(modify.has('paymo_update_comment'), true);
+});
+
 test('timer_status filters the running entry to the documented subset', async () => {
   const handlers = handlersFor({
     currentUserId: async () => 9,
@@ -270,7 +400,7 @@ test('list tools cap the response at 50 records unless a larger limit is asked f
 test('empty toolset selection resolves to the default toolsets (context, tasks, time)', () => {
   const names = resolve({ mode: 'full' });
 
-  assert.equal(names.size, 13);
+  assert.equal(names.size, 15);
   assert.equal(names.has('paymo_me'), true);
   assert.equal(names.has('paymo_create_task'), true);
   assert.equal(names.has('paymo_delete_entry'), true);
@@ -279,7 +409,7 @@ test('empty toolset selection resolves to the default toolsets (context, tasks, 
 test('the all keyword expands to every toolset', () => {
   const names = resolve({ toolsets: ['all'], mode: 'full' });
 
-  assert.equal(names.size, 34);
+  assert.equal(names.size, 36);
   assert.equal(names.has('paymo_create_project'), true);
   assert.equal(names.has('paymo_list_clients'), true);
   assert.equal(names.has('paymo_list_invoices'), true);
@@ -288,7 +418,7 @@ test('the all keyword expands to every toolset', () => {
 test('default is a keyword, so default,<toolset> adds instead of replacing', () => {
   const names = resolve({ toolsets: ['default', 'context'], mode: 'full' });
 
-  assert.equal(names.size, 13);
+  assert.equal(names.size, 15);
 });
 
 test('toolset names are additive, case-insensitive and whitespace-tolerant', () => {
@@ -331,7 +461,7 @@ test('the deny regex subtracts last, even a tool explicitly named in PAYMO_TOOLS
   });
 
   assert.equal(names.has('paymo_create_task'), false);
-  assert.equal(names.size, 29);
+  assert.equal(names.size, 31);
 });
 
 test('permission mode wins over every explicit selection', () => {

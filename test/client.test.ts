@@ -89,6 +89,44 @@ test('addComment sends a form-encoded request to /comments', async () => {
   assert.equal(capturedInit?.body, 'task_id=123&content=hello+there');
 });
 
+test('comments lists /comments filtered by task_id', async () => {
+  let requestedUrl = '';
+  const client = makeClient((url) => {
+    requestedUrl = url;
+    return new Response('{"comments":[{"id":1}]}');
+  });
+
+  assert.deepEqual(await client.comments(123), [{ id: 1 }]);
+  assert.match(requestedUrl, /task_id%3D123/);
+});
+
+test('updateComment PUTs a form-encoded body to the comment and unwraps the record', async () => {
+  let capturedUrl = '';
+  let capturedInit: RequestInit | undefined;
+  const client = makeClient((url, init) => {
+    capturedUrl = url;
+    capturedInit = init;
+    return new Response('{"comments":[{"id":21,"content":"fixed"}]}');
+  });
+
+  const updated = await client.updateComment(21, 'fixed');
+
+  assert.equal(capturedUrl, 'https://app.paymoapp.com/api/comments/21');
+  assert.equal(capturedInit?.method, 'PUT');
+  assert.equal(
+    (capturedInit?.headers as Record<string, string>)['Content-Type'],
+    'application/x-www-form-urlencoded',
+  );
+  assert.equal(capturedInit?.body, 'content=fixed');
+  assert.deepEqual(updated, { id: 21, content: 'fixed' });
+});
+
+test('updateComment throws when Paymo returns no comment', async () => {
+  const client = makeClient(() => new Response('{"comments":[]}'));
+
+  await assert.rejects(() => client.updateComment(21, 'fixed'), /Comment 21 update did not return/);
+});
+
 test('currentUserId resolves from the /me response and throws when missing', async () => {
   const ok = makeClient(() => new Response('{"users":[{"id":5}]}'));
   assert.equal(await ok.currentUserId(), 5);

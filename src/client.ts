@@ -201,6 +201,30 @@ export class PaymoClient {
     return comment;
   }
 
+  /**
+   * Edits a comment in place. Sent form-encoded for the same reason `addComment` is: `/comments`
+   * is the one endpoint in this API that rejects a JSON body (see the API quirks in the plans).
+   * Unverified live — the change that added it was not allowed to call the real API.
+   */
+  async updateComment(commentId: number, content: string): Promise<PaymoRecord> {
+    const payload = await this.request('PUT', `/comments/${commentId}`, { form: { content } });
+    const comment = (payload.comments as PaymoRecord[] | undefined)?.[0];
+
+    if (comment === undefined) {
+      throw new Error(`Comment ${commentId} update did not return a comment.`);
+    }
+
+    return comment;
+  }
+
+  /**
+   * Comments are a resource of their own, not a field of the task, so reading a task's
+   * conversation is a filtered listing rather than an `include` on the task read.
+   */
+  async comments(taskId: number): Promise<PaymoRecord[]> {
+    return this.list('comments', 'comments', `task_id=${taskId}`);
+  }
+
   async startEntry(taskId: number): Promise<PaymoRecord> {
     const payload = await this.request('POST', '/entries', {
       body: {
