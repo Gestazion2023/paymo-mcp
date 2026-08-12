@@ -66,11 +66,11 @@ guessing which variable won.
 |---|---|---|---|
 | `context` | `paymo_me`, `paymo_list_workflow_statuses` — who am I, what statuses exist | 2 | 1,008 |
 | `tasks` | tasks, tasklists (read), comments, subtasks | 7 | 5,453 |
-| `time` | time entries: timer control, manual logging, deletion | 4 | 795 |
+| `time` | time entries: timer control, manual logging, deletion | 4 | 876 |
 | `projects` | project CRUD, project templates, project statuses, tasklists (write) — milestones deferred | 9 | 5,794 |
 | `clients` | client CRUD (no delete), client contacts, company — portal access included | 8 | 6,136 |
 | `billing` | invoices, invoice payments, estimates, invoice templates — **read-only, deliberately** | 6 | 4,124 |
-| `all` | every toolset above | 34 | 21,710 |
+| `all` | every toolset above | 34 | 21,791 |
 
 `default` = `context` + `tasks` + `time`, which is approximately the surface the package exposed
 before toolsets existed — an existing user upgrading sees no change. Names are additive and
