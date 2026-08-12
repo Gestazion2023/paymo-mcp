@@ -57,13 +57,16 @@ export const SUBSETS: Record<RecordKind, readonly string[]> = {
   tasklist: ['id', 'name', 'project_id', 'seq', 'milestone_id', 'tasks_count'],
   // Comments only have a listing here (no detail read), so this doubles as the detail subset. It
   // keeps the whole conversation shape: who wrote it (`user_id`), when (`created_on`), the body,
-  // and the threading (`thread_id`, `reply_id`) a reader needs to follow a reply chain. The only
-  // write tool is paymo_add_comment, which sends task_id and content — both readable here, so there
-  // is no update-replacement data-loss path. NOT verified with scripts/field-diff.mjs: the task
-  // that added this tool forbade live API calls, so any field Paymo returns beyond the documented
-  // ones is unknown. Run the diff before trusting the non-verbose output.
+  // and the threading (`thread_id`, `reply_id`) a reader needs to follow a reply chain.
+  // `edited_on` is here because paymo_update_comment exists: it is the only field separating a
+  // comment as written from one rewritten afterwards, and a reader deciding whether to trust a
+  // decision quoted from a comment needs to see that it was changed.
+  // Verified with scripts/field-diff.mjs against a real task. The one field still dropped is
+  // `options`, a notification envelope (`{"notification_to": []}`) that no reader and no write tool
+  // consumes.
   comment: [
     'id', 'task_id', 'thread_id', 'reply_id', 'user_id', 'content', 'created_on', 'updated_on',
+    'edited_on',
   ],
   workflowstatus: ['id', 'workflow_id', 'name', 'seq', 'action', 'color'],
   entry: [

@@ -145,7 +145,7 @@ test('projectSummary drops the heavy detail fields a listing does not need', () 
   });
 });
 
-test('comment subset keeps the author, the body and the threading fields', () => {
+test('comment subset keeps the author, the body, the threading fields and edited_on', () => {
   const comment = {
     id: 1234,
     task_id: 5678,
@@ -155,6 +155,8 @@ test('comment subset keeps the author, the body and the threading fields', () =>
     content: '<p>looks good</p>',
     created_on: '2026-08-01T09:00:00Z',
     updated_on: '2026-08-01T09:05:00Z',
+    edited_on: '2026-08-01T09:05:00Z',
+    options: { notification_to: [] },
     seen_by: [11, 22],
     attachments: [],
   };
@@ -168,6 +170,7 @@ test('comment subset keeps the author, the body and the threading fields', () =>
     content: '<p>looks good</p>',
     created_on: '2026-08-01T09:00:00Z',
     updated_on: '2026-08-01T09:05:00Z',
+    edited_on: '2026-08-01T09:05:00Z',
   });
 });
 

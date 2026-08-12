@@ -307,11 +307,16 @@ There is no comment delete tool, for the same reason the other toolsets ship non
 replaces the body wholesale, so `paymo_update_comment` is the repair path for a comment posted with
 the wrong markup — pass the `comment_id` from the listing and the full new body, not a patch.
 
-Both tools are **unverified live**: the change that added them was not allowed to call the real API,
-so they are covered by stub-client unit tests only. `scripts/field-diff.mjs` has not been run for the
-`comment` record kind either — the non-verbose subset carries the fields Paymo documents (`id`,
-`task_id`, `thread_id`, `reply_id`, `user_id`, `content`, `created_on`, `updated_on`), and anything
-returned beyond those is dropped unseen. Pass `verbose: true` if you need to check.
+Both tools are **verified live**. `paymo_list_comments` was read against a real task and
+`paymo_update_comment` rewrote a real comment: the response came back with `edited_on` set to the
+edit time and `created_on` unchanged, which also confirms `PUT /comments/{id}` takes the same
+form-encoded body as `POST /comments` rather than JSON.
+
+`scripts/field-diff.mjs` has been run for the `comment` record kind. It dropped exactly one field
+beyond the documented set, `options` — a notification envelope (`{"notification_to": []}`) that no
+reader and no write tool consumes. `edited_on` was the other field it surfaced, and it is now part of
+the subset: with an update tool in the toolset, it is the only thing separating a comment as written
+from one rewritten afterwards.
 
 ### Rich text
 
