@@ -29,8 +29,9 @@ export const TOOLSETS: Record<string, string[]> = {
   context: ['paymo_me', 'paymo_list_workflow_statuses'],
   tasks: [
     'paymo_list_projects', 'paymo_list_tasklists', 'paymo_list_tasks', 'paymo_get_task',
-    'paymo_list_comments',
+    'paymo_list_comments', 'paymo_list_users',
     'paymo_create_task', 'paymo_update_task', 'paymo_add_comment', 'paymo_update_comment',
+    'paymo_upload_file',
   ],
   time: ['paymo_timer_status', 'paymo_start_timer', 'paymo_stop_timer', 'paymo_delete_entry'],
   projects: [

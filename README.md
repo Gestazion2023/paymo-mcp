@@ -65,12 +65,12 @@ guessing which variable won.
 | Toolset | Covers | Tools | Schema cost (chars) |
 |---|---|---|---|
 | `context` | `paymo_me`, `paymo_list_workflow_statuses` — who am I, what statuses exist | 2 | 1,008 |
-| `tasks` | tasks, tasklists (read), comments (read and write), subtasks | 9 | 6,796 |
+| `tasks` | tasks, tasklists (read), comments (read and write), file attachments, users (read), subtasks | 11 | 6,796 |
 | `time` | time entries: timer control, manual logging, deletion | 4 | 876 |
 | `projects` | project CRUD, project templates, project statuses, tasklists (write) — milestones deferred | 9 | 5,794 |
 | `clients` | client CRUD (no delete), client contacts, company — portal access included | 8 | 6,136 |
 | `billing` | invoices, invoice payments, estimates, invoice templates — **read-only, deliberately** | 6 | 4,124 |
-| `all` | every toolset above | 36 | 23,134 |
+| `all` | every toolset above | 38 | 23,134 |
 
 `default` = `context` + `tasks` + `time`, which is approximately the surface the package exposed
 before toolsets existed — an existing user upgrading sees no change. Names are additive and
@@ -178,6 +178,7 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_get_task` | `task: string` (id or code), `verbose?` | `GET /tasks/{id}` |
 | `paymo_list_comments` | `task: string` (id or code), `limit?`, `offset?`, `verbose?` | `GET /comments?where=task_id=…` |
 | `paymo_list_workflow_statuses` | `limit?`, `offset?`, `verbose?` | `GET /workflowstatuses` |
+| `paymo_list_users` | `active?: boolean` (default true), `limit?`, `offset?`, `verbose?` | `GET /users?where=active=…` |
 | `paymo_timer_status` | `verbose?` | `GET /entries?where=end_time=null and user_id={me}` |
 | `paymo_get_project` | `project_id` (req), `verbose?` | `GET /projects/{id}` |
 | `paymo_list_project_templates` | `limit?`, `offset?`, `verbose?` | `GET /projecttemplates` |
@@ -201,6 +202,7 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_update_task` | `task` (req), plus any of `name`, `description`, `due_date`, `priority`, `users`, `complete`, `status` | `PUT /tasks/{id}` |
 | `paymo_add_comment` | `task` (req), `content` (req) | `POST /comments` |
 | `paymo_update_comment` | `comment_id` (req), `content` (req) | `PUT /comments/{id}` |
+| `paymo_upload_file` | `task` (req), `path` (req, absolute local path, max 25 MiB) | `POST /files` (multipart) |
 | `paymo_start_timer` | `task` (req) | `POST /entries` |
 | `paymo_stop_timer` | — | `PUT /entries/{id}` |
 | `paymo_create_project` | `name` (req), `code?`, `client_id?`, `template_id?`, `description?`, `budget_hours?`, `billable?` | `POST /projects` |

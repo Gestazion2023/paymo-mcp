@@ -36,6 +36,29 @@ export const tasksTools: Record<string, ToolDef> = {
       }),
   },
 
+  paymo_list_users: {
+    level: 'read',
+    description:
+      'List the users of the Paymo account (id, name, email, type, active). Use it to find the '
+      + 'user ids to pass as `users` (assignees) to paymo_create_task and paymo_update_task.',
+    inputSchema: {
+      active: z
+        .boolean()
+        .default(true)
+        .describe('When true (default) only active users are returned.'),
+      limit,
+      offset,
+      verbose,
+    },
+    handler: (args: { active: boolean; limit: number; offset: number; verbose: boolean }, ctx) =>
+      respond('list users', async () => {
+        const records = await ctx.client.users(args.active);
+        const filtered = records.map((record) => filterRecord(record, 'user', args.verbose));
+
+        return paginate(filtered, args.limit, args.offset);
+      }),
+  },
+
   paymo_list_tasklists: {
     level: 'read',
     description: 'List tasklists (columns) for a project, or across all tasks when unset.',
@@ -136,7 +159,7 @@ export const tasksTools: Record<string, ToolDef> = {
   paymo_create_task: {
     level: 'write',
     description:
-      'Create a new Paymo task. Requires a name and either a project_id or a tasklist_id. Optional: description, due_date (YYYY-MM-DD), priority (100/75/50/25), users (list of user ids).',
+      'Create a new Paymo task. Requires a name and either a project_id or a tasklist_id. Optional: description, due_date (YYYY-MM-DD), priority (100/75/50/25), users (list of user ids, see paymo_list_users).',
     inputSchema: {
       name: z.string().max(255).describe('Task title.'),
       project_id: z.number().int().optional().describe('Required if tasklist_id is not given.'),
@@ -151,7 +174,7 @@ export const tasksTools: Record<string, ToolDef> = {
         .describe(`Optional task description. ${RICH_TEXT}`),
       due_date: z.string().optional().describe('Optional due date in YYYY-MM-DD format.'),
       priority: z.number().int().optional().describe(`Optional ${PRIORITY}`),
-      users: z.array(z.number().int()).optional().describe('Optional assignees (Paymo user ids).'),
+      users: z.array(z.number().int()).optional().describe('Optional assignees (Paymo user ids, see paymo_list_users).'),
     },
     handler: (
       args: {
@@ -198,7 +221,7 @@ export const tasksTools: Record<string, ToolDef> = {
       description: z.string().optional().describe(`New description. ${RICH_TEXT}`),
       due_date: z.string().optional().describe('Due date in YYYY-MM-DD format.'),
       priority: z.number().int().optional().describe(`${PRIORITY}`),
-      users: z.array(z.number().int()).optional().describe('Assignees (Paymo user ids).'),
+      users: z.array(z.number().int()).optional().describe('Assignees (Paymo user ids, see paymo_list_users). Replaces the whole assignee list, so include the current ones.'),
       complete: z.boolean().optional().describe('Mark complete (true) or reopen (false). Also resets status, so do not pass status too.'),
       status: statusArg.optional().describe('Workflow status id or alias.'),
     },
@@ -246,6 +269,30 @@ export const tasksTools: Record<string, ToolDef> = {
       respond('add comment', async () => {
         const id = await ctx.client.resolveTaskId(args.task);
         return ctx.client.addComment(id, args.content);
+      }),
+  },
+
+  paymo_upload_file: {
+    level: 'write',
+    description:
+      'Attach a local file to a Paymo task. The file must exist on the machine running this '
+      + 'server, be a regular file and be at most 25 MiB. Returns the attachment id, name, size '
+      + 'and task_id.',
+    inputSchema: {
+      task: taskIdentifier,
+      path: z.string().describe('Absolute path of the local file to upload.'),
+    },
+    handler: (args: { task: string; path: string }, ctx) =>
+      respond('upload file', async () => {
+        const id = await ctx.client.resolveTaskId(args.task);
+        const file = await ctx.client.uploadFile(id, args.path);
+
+        return {
+          id: file.id,
+          original_filename: file.original_filename,
+          size: file.size,
+          task_id: file.task_id,
+        };
       }),
   },
 

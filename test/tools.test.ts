@@ -120,20 +120,20 @@ test('start_timer reports no previous entry when nothing was running', async () 
   assert.deepEqual(payloadOf(result), { started: { id: 2, task_id: 1234 }, previous_closed: null });
 });
 
-test('read-only mode registers the read tools only; full registers all 36', () => {
+test('read-only mode registers the read tools only; full registers all 38', () => {
   const readOnly = handlersFor({}, { permissionMode: 'readonly' });
   const full = handlersFor({}, { permissionMode: 'full' });
 
-  assert.equal(readOnly.size, 21);
-  assert.equal(full.size, 36);
+  assert.equal(readOnly.size, 22);
+  assert.equal(full.size, 38);
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
 });
 
-test('default mode registers 35 of 36 tools, everything except paymo_delete_entry', () => {
+test('default mode registers 37 of 38 tools, everything except paymo_delete_entry', () => {
   const handlers = handlersFor({});
 
-  assert.equal(handlers.size, 35);
+  assert.equal(handlers.size, 37);
   assert.equal(handlers.has('paymo_delete_entry'), false);
   assert.equal(handlers.has('paymo_stop_timer'), true);
   assert.equal(handlers.has('paymo_create_task'), true);
@@ -400,7 +400,7 @@ test('list tools cap the response at 50 records unless a larger limit is asked f
 test('empty toolset selection resolves to the default toolsets (context, tasks, time)', () => {
   const names = resolve({ mode: 'full' });
 
-  assert.equal(names.size, 15);
+  assert.equal(names.size, 17);
   assert.equal(names.has('paymo_me'), true);
   assert.equal(names.has('paymo_create_task'), true);
   assert.equal(names.has('paymo_delete_entry'), true);
@@ -409,7 +409,7 @@ test('empty toolset selection resolves to the default toolsets (context, tasks, 
 test('the all keyword expands to every toolset', () => {
   const names = resolve({ toolsets: ['all'], mode: 'full' });
 
-  assert.equal(names.size, 36);
+  assert.equal(names.size, 38);
   assert.equal(names.has('paymo_create_project'), true);
   assert.equal(names.has('paymo_list_clients'), true);
   assert.equal(names.has('paymo_list_invoices'), true);
@@ -418,7 +418,7 @@ test('the all keyword expands to every toolset', () => {
 test('default is a keyword, so default,<toolset> adds instead of replacing', () => {
   const names = resolve({ toolsets: ['default', 'context'], mode: 'full' });
 
-  assert.equal(names.size, 15);
+  assert.equal(names.size, 17);
 });
 
 test('toolset names are additive, case-insensitive and whitespace-tolerant', () => {
@@ -461,7 +461,7 @@ test('the deny regex subtracts last, even a tool explicitly named in PAYMO_TOOLS
   });
 
   assert.equal(names.has('paymo_create_task'), false);
-  assert.equal(names.size, 31);
+  assert.equal(names.size, 33);
 });
 
 test('permission mode wins over every explicit selection', () => {
@@ -1132,4 +1132,46 @@ test('list_invoice_templates keeps the layout identity and drops the html and cs
     title: 'INVOICE',
     is_default: false,
   }]);
+});
+
+test('upload_file resolves the task code and returns only the attachment summary', async () => {
+  let captured: { id?: number; path?: string } = {};
+  const handlers = handlersFor({
+    resolveTaskId: async () => 1234,
+    uploadFile: async (id, path) => {
+      captured = { id, path };
+      return { id: 7, original_filename: 'a.csv', size: 10, task_id: id, virus_scan_result: 'pending' };
+    },
+  });
+
+  const result = await handlers.get('paymo_upload_file')!({ task: 'ABC-1', path: '/tmp/a.csv' });
+
+  assert.deepEqual(captured, { id: 1234, path: '/tmp/a.csv' });
+  assert.deepEqual(payloadOf(result), { id: 7, original_filename: 'a.csv', size: 10, task_id: 1234 });
+});
+
+test('upload_file is a write tool, absent under readonly', () => {
+  const readOnly = handlersFor({}, { permissionMode: 'readonly' });
+
+  assert.equal(readOnly.has('paymo_upload_file'), false);
+});
+
+test('list_users asks for active users by default, filters fields and pages', async () => {
+  let asked: boolean | undefined;
+  const handlers = handlersFor({
+    users: async (active) => {
+      asked = active;
+      return [
+        { id: 1, name: 'A', email: 'a@example.com', type: 'Employee', active: true, avatar: 'x' },
+        { id: 2, name: 'B', email: 'b@example.com', type: 'Employee', active: true },
+      ];
+    },
+  });
+
+  const result = await handlers.get('paymo_list_users')!({ limit: 1, offset: 1 });
+
+  assert.equal(asked, true);
+  assert.deepEqual(payloadOf(result), [
+    { id: 2, name: 'B', email: 'b@example.com', type: 'Employee', active: true },
+  ]);
 });

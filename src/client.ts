@@ -1,4 +1,13 @@
+import { readFile, stat } from 'node:fs/promises';
+import { basename, isAbsolute } from 'node:path';
+
 export type PaymoRecord = Record<string, unknown>;
+
+/**
+ * Paymo documents no upload limit, so this is a conservative cap of our own: the file is read
+ * into memory before sending, and an attachment this big is almost certainly a mistake.
+ */
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 const MAX_ERROR_BODY = 400;
 
@@ -38,6 +47,7 @@ const DEFAULT_RETRY_DELAY_MS = 5_000;
 interface RequestOptions {
   body?: PaymoRecord;
   form?: PaymoRecord;
+  multipart?: FormData;
 }
 
 export class PaymoClient {
@@ -143,6 +153,10 @@ export class PaymoClient {
     return (payload.projects as PaymoRecord[] | undefined) ?? [];
   }
 
+  async users(active: boolean): Promise<PaymoRecord[]> {
+    return this.list('users', 'users', `active=${active ? 'true' : 'false'}`);
+  }
+
   async tasklists(projectId: number | null): Promise<PaymoRecord[]> {
     const path = projectId === null
       ? '/tasklists'
@@ -199,6 +213,56 @@ export class PaymoClient {
     }
 
     return comment;
+  }
+
+  /**
+   * Attaches a local file to a task. `/files` takes multipart/form-data with the numeric
+   * `task_id` and the binary under `file`; the Content-Type header is left to fetch, which has to
+   * generate the multipart boundary itself.
+   */
+  async uploadFile(taskId: number, path: string): Promise<PaymoRecord> {
+    const size = await this.assertUploadable(path);
+    const form = new FormData();
+
+    form.set('task_id', String(taskId));
+    form.set('file', new Blob([await readFile(path)]), basename(path));
+
+    const payload = await this.request('POST', '/files', { multipart: form });
+    const file = (payload.files as PaymoRecord[] | undefined)?.[0];
+
+    if (file === undefined) {
+      throw new Error(`Paymo did not return the uploaded file (${size} bytes) for task ${taskId}.`);
+    }
+
+    return file;
+  }
+
+  private async assertUploadable(path: string): Promise<number> {
+    if (!isAbsolute(path)) {
+      throw new Error(`File path must be absolute: '${path}'.`);
+    }
+
+    const info = await stat(path).catch(() => null);
+
+    if (info === null) {
+      throw new Error(`File not found: '${path}'.`);
+    }
+
+    if (!info.isFile()) {
+      throw new Error(`Not a regular file: '${path}'.`);
+    }
+
+    if (info.size === 0) {
+      throw new Error(`File is empty: '${path}'.`);
+    }
+
+    if (info.size > MAX_UPLOAD_BYTES) {
+      throw new Error(
+        `File is ${info.size} bytes, over the ${MAX_UPLOAD_BYTES} byte (25 MiB) upload limit.`,
+      );
+    }
+
+    return info.size;
   }
 
   /**
@@ -460,9 +524,11 @@ export class PaymoClient {
       Accept: 'application/json',
     };
 
-    let body: string | undefined;
+    let body: string | FormData | undefined;
 
-    if (options.form !== undefined) {
+    if (options.multipart !== undefined) {
+      body = options.multipart;
+    } else if (options.form !== undefined) {
       headers['Content-Type'] = 'application/x-www-form-urlencoded';
       body = new URLSearchParams(
         Object.entries(options.form).map(([key, value]) => [key, String(value)] as [string, string]),

@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { PaymoClient, PaymoHttpError } from '../src/client.ts';
 
@@ -407,4 +410,61 @@ test('invoiceTemplates unwraps the invoicetemplates key', async () => {
   assert.deepEqual(await client.invoiceTemplates(), [
     { id: 1130, name: 'English - Client on right' },
   ]);
+});
+
+async function tempFile(name: string, content: string): Promise<string> {
+  const path = join(await mkdtemp(join(tmpdir(), 'paymo-mcp-')), name);
+
+  await writeFile(path, content);
+
+  return path;
+}
+
+test('uploadFile posts multipart with task_id and the file, leaving Content-Type to fetch', async () => {
+  let capturedUrl = '';
+  let capturedInit: RequestInit | undefined;
+  const client = makeClient((url, init) => {
+    capturedUrl = url;
+    capturedInit = init;
+    return new Response('{"files":[{"id":9,"task_id":123}]}');
+  });
+
+  const file = await client.uploadFile(123, await tempFile('data.csv', 'a,b\n1,2\n'));
+
+  assert.deepEqual(file, { id: 9, task_id: 123 });
+  assert.equal(capturedUrl, 'https://app.paymoapp.com/api/files');
+  assert.equal(capturedInit?.method, 'POST');
+  assert.equal(
+    (capturedInit?.headers as Record<string, string>)['Content-Type'],
+    undefined,
+  );
+
+  const form = capturedInit?.body as FormData;
+  const sent = form.get('file') as File;
+
+  assert.equal(form.get('task_id'), '123');
+  assert.equal(sent.name, 'data.csv');
+  assert.equal(await sent.text(), 'a,b\n1,2\n');
+});
+
+test('uploadFile rejects relative, missing, non-regular and empty paths before any request', async () => {
+  const client = makeClient(() => {
+    throw new Error('no request expected');
+  });
+
+  await assert.rejects(() => client.uploadFile(1, 'rel.csv'), /must be absolute/);
+  await assert.rejects(() => client.uploadFile(1, '/nonexistent/x.csv'), /File not found/);
+  await assert.rejects(() => client.uploadFile(1, tmpdir()), /Not a regular file/);
+  const empty = await tempFile('e.csv', '');
+
+  await assert.rejects(() => client.uploadFile(1, empty), /File is empty/);
+});
+
+test('uploadFile errors when Paymo returns no file', async () => {
+  const client = makeClient(() => new Response('{"files":[]}'));
+
+  await assert.rejects(
+    async () => client.uploadFile(1, await tempFile('x.txt', 'x')),
+    /did not return the uploaded file/,
+  );
 });
