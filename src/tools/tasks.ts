@@ -276,7 +276,8 @@ export const tasksTools: Record<string, ToolDef> = {
     level: 'write',
     description:
       'Attach a local file to a Paymo task. The file must exist on the machine running this '
-      + 'server, be a regular file and be at most 25 MiB. Returns the attachment id, name, size '
+      + 'server, sit inside the configured PAYMO_UPLOAD_DIR, be a regular file and be at most '
+      + '25 MiB. Returns the attachment id, name, size '
       + 'and task_id.',
     inputSchema: {
       task: taskIdentifier,

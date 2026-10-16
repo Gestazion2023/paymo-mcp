@@ -59,12 +59,14 @@ function resolve(config: {
   tools?: string[];
   denied?: RegExp | null;
   mode?: PermissionMode;
+  uploadDir?: string | null;
 }): Set<string> {
   return resolveTools({
     toolsets: config.toolsets ?? [],
     tools: config.tools ?? [],
     deniedToolsRegex: config.denied ?? null,
     permissionMode: config.mode ?? 'modify',
+    uploadDir: config.uploadDir === undefined ? '/uploads' : config.uploadDir,
   });
 }
 
@@ -1148,6 +1150,15 @@ test('upload_file resolves the task code and returns only the attachment summary
 
   assert.deepEqual(captured, { id: 1234, path: '/tmp/a.csv' });
   assert.deepEqual(payloadOf(result), { id: 7, original_filename: 'a.csv', size: 10, task_id: 1234 });
+});
+
+test('upload_file is not registered unless an upload directory is configured', () => {
+  assert.equal(resolve({ toolsets: ['tasks'], uploadDir: null }).has('paymo_upload_file'), false);
+  assert.equal(
+    resolve({ tools: ['paymo_upload_file'], uploadDir: null }).has('paymo_upload_file'),
+    false,
+  );
+  assert.equal(resolve({ toolsets: ['tasks'] }).has('paymo_upload_file'), true);
 });
 
 test('upload_file is a write tool, absent under readonly', () => {

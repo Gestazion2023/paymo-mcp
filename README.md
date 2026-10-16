@@ -52,6 +52,7 @@ Environment variables read by `paymo-mcp`:
 | `PAYMO_TOOLSETS` | no | `default` | Comma-separated toolset names, plus the keywords `default` and `all`. Case-insensitive and whitespace-tolerant. |
 | `PAYMO_TOOLS` | no | — | Comma-separated tool names, additive on top of the toolsets. Matched exactly as registered. |
 | `PAYMO_DENIED_TOOLS_REGEX` | no | — | One JS regex, matched against tool names and subtracted from the resolved set last. |
+| `PAYMO_UPLOAD_DIR` | no | — | Directory `paymo_upload_file` may read from (symlinks resolved, nothing outside it). **Unset = the tool is not registered**: it reads local files on the model's behalf, so it is opt-in. |
 | `PAYMO_PERMISSION_MODE` | no | `modify` | One of `readonly`, `modify`, `full` — see below. |
 | `PAYMO_READ_ONLY` | no | — | **Deprecated.** Use `PAYMO_PERMISSION_MODE`. `true` maps to `readonly`, `false` to `modify`. |
 
@@ -202,7 +203,7 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_update_task` | `task` (req), plus any of `name`, `description`, `due_date`, `priority`, `users`, `complete`, `status` | `PUT /tasks/{id}` |
 | `paymo_add_comment` | `task` (req), `content` (req) | `POST /comments` |
 | `paymo_update_comment` | `comment_id` (req), `content` (req) | `PUT /comments/{id}` |
-| `paymo_upload_file` | `task` (req), `path` (req, absolute local path, max 25 MiB) | `POST /files` (multipart) |
+| `paymo_upload_file` | `task` (req), `path` (req, absolute local path inside `PAYMO_UPLOAD_DIR`, max 25 MiB) | `POST /files` (multipart) |
 | `paymo_start_timer` | `task` (req) | `POST /entries` |
 | `paymo_stop_timer` | — | `PUT /entries/{id}` |
 | `paymo_create_project` | `name` (req), `code?`, `client_id?`, `template_id?`, `description?`, `budget_hours?`, `billable?` | `POST /projects` |

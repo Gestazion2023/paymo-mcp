@@ -33,7 +33,7 @@ const packageJson = JSON.parse(
 const server = new McpServer({ name: 'paymo-mcp', version: packageJson.version });
 
 registerTools(server, {
-  client: new PaymoClient({ apiKey: config.apiKey, baseUrl: config.baseUrl }),
+  client: new PaymoClient({ apiKey: config.apiKey, baseUrl: config.baseUrl, uploadDir: config.uploadDir }),
   resolver: new StatusResolver(config.statusAliases),
   defaultProjectId: config.defaultProjectId,
   permissionMode: config.permissionMode,

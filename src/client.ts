@@ -1,5 +1,7 @@
-import { readFile, stat } from 'node:fs/promises';
-import { basename, isAbsolute } from 'node:path';
+import { constants } from 'node:fs';
+import { open, realpath } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
+import { basename, isAbsolute, relative, sep } from 'node:path';
 
 export type PaymoRecord = Record<string, unknown>;
 
@@ -36,6 +38,8 @@ export class PaymoHttpError extends Error {
 export interface PaymoClientOptions {
   apiKey: string;
   baseUrl: string;
+  /** Only files under this directory may be uploaded; null disables uploads. */
+  uploadDir?: string | null;
   fetch?: typeof globalThis.fetch;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -53,12 +57,14 @@ interface RequestOptions {
 export class PaymoClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private readonly uploadDir: string | null;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor({
     apiKey,
     baseUrl,
+    uploadDir = null,
     fetch: fetchImpl = globalThis.fetch,
     sleep = (ms: number): Promise<void> => new Promise((resolve): void => {
       setTimeout(resolve, ms);
@@ -70,6 +76,7 @@ export class PaymoClient {
 
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/+$/, '');
+    this.uploadDir = uploadDir;
     this.fetchImpl = fetchImpl;
     this.sleep = sleep;
   }
@@ -221,32 +228,61 @@ export class PaymoClient {
    * generate the multipart boundary itself.
    */
   async uploadFile(taskId: number, path: string): Promise<PaymoRecord> {
-    const size = await this.assertUploadable(path);
-    const form = new FormData();
+    const real = await this.resolveUploadPath(path);
+    const handle = await open(real, constants.O_RDONLY | constants.O_NOFOLLOW);
 
-    form.set('task_id', String(taskId));
-    form.set('file', new Blob([await readFile(path)]), basename(path));
+    try {
+      const size = await this.assertUploadable(handle, path);
+      const form = new FormData();
 
-    const payload = await this.request('POST', '/files', { multipart: form });
-    const file = (payload.files as PaymoRecord[] | undefined)?.[0];
+      form.set('task_id', String(taskId));
+      form.set('file', new Blob([await handle.readFile()]), basename(real));
 
-    if (file === undefined) {
-      throw new Error(`Paymo did not return the uploaded file (${size} bytes) for task ${taskId}.`);
+      const payload = await this.request('POST', '/files', { multipart: form });
+      const file = (payload.files as PaymoRecord[] | undefined)?.[0];
+
+      if (file === undefined) {
+        throw new Error(`Paymo did not return the uploaded file (${size} bytes) for task ${taskId}.`);
+      }
+
+      return file;
+    } finally {
+      await handle.close();
     }
-
-    return file;
   }
 
-  private async assertUploadable(path: string): Promise<number> {
+  /**
+   * Uploads read an arbitrary local file on behalf of the model, so they are confined to
+   * PAYMO_UPLOAD_DIR: the path is resolved through symlinks first, then must sit inside the
+   * (also resolved) directory. The file is then opened once with O_NOFOLLOW and every later
+   * check and read goes through that descriptor, so it cannot be swapped after the check.
+   */
+  private async resolveUploadPath(path: string): Promise<string> {
+    if (this.uploadDir === null) {
+      throw new Error('File uploads are disabled: set PAYMO_UPLOAD_DIR to an allowed directory.');
+    }
+
     if (!isAbsolute(path)) {
       throw new Error(`File path must be absolute: '${path}'.`);
     }
 
-    const info = await stat(path).catch(() => null);
+    const real = await realpath(path).catch(() => null);
 
-    if (info === null) {
+    if (real === null) {
       throw new Error(`File not found: '${path}'.`);
     }
+
+    const rel = relative(await realpath(this.uploadDir), real);
+
+    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+      throw new Error(`File is outside the allowed upload directory: '${path}'.`);
+    }
+
+    return real;
+  }
+
+  private async assertUploadable(handle: FileHandle, path: string): Promise<number> {
+    const info = await handle.stat();
 
     if (!info.isFile()) {
       throw new Error(`Not a regular file: '${path}'.`);

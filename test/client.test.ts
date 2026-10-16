@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { test } from 'node:test';
 import { PaymoClient, PaymoHttpError } from '../src/client.ts';
 
@@ -9,6 +9,7 @@ function makeClient(handler: (url: string, init?: RequestInit) => Response): Pay
   return new PaymoClient({
     apiKey: 'test-key',
     baseUrl: 'https://app.paymoapp.com/api',
+    uploadDir: tmpdir(),
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) =>
       handler(String(input), init)) as unknown as typeof fetch,
   });
@@ -466,5 +467,36 @@ test('uploadFile errors when Paymo returns no file', async () => {
   await assert.rejects(
     async () => client.uploadFile(1, await tempFile('x.txt', 'x')),
     /did not return the uploaded file/,
+  );
+});
+
+test('uploadFile is disabled without an upload directory', async () => {
+  const client = new PaymoClient({ apiKey: 'k', baseUrl: 'https://x.test/api' });
+
+  await assert.rejects(
+    async () => client.uploadFile(1, await tempFile('a.txt', 'x')),
+    /uploads are disabled/,
+  );
+});
+
+test('uploadFile rejects files outside the upload directory, including via symlink and ..', async () => {
+  const allowed = await mkdtemp(join(tmpdir(), 'paymo-allowed-'));
+  const secret = await tempFile('secret.txt', 'top secret');
+  const client = new PaymoClient({
+    apiKey: 'k',
+    baseUrl: 'https://x.test/api',
+    uploadDir: allowed,
+    fetch: (async () => {
+      throw new Error('no request expected');
+    }) as unknown as typeof fetch,
+  });
+
+  await symlink(secret, join(allowed, 'link.txt'));
+
+  await assert.rejects(() => client.uploadFile(1, secret), /outside the allowed upload directory/);
+  await assert.rejects(() => client.uploadFile(1, join(allowed, 'link.txt')), /outside the allowed/);
+  await assert.rejects(
+    () => client.uploadFile(1, join(allowed, '..', basename(secret))),
+    /outside the allowed|File not found/,
   );
 });

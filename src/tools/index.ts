@@ -69,6 +69,7 @@ export function resolveTools(config: {
   tools: string[];
   deniedToolsRegex: RegExp | null;
   permissionMode: PermissionMode;
+  uploadDir?: string | null;
 }): Set<string> {
   const names = new Set<string>();
 
@@ -114,6 +115,11 @@ export function resolveTools(config: {
         names.delete(name);
       }
     }
+  }
+
+  // paymo_upload_file reads local files: it exists only when an upload directory is configured.
+  if (!config.uploadDir) {
+    names.delete('paymo_upload_file');
   }
 
   const registered = new Set<string>();

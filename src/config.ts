@@ -12,6 +12,7 @@ export type PermissionMode = 'readonly' | 'modify' | 'full';
 export interface Config {
   apiKey: string;
   baseUrl: string;
+  uploadDir: string | null;
   defaultProjectId: number | null;
   permissionMode: PermissionMode;
   statusAliases: Record<string, number>;
@@ -193,6 +194,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   return {
     apiKey,
     baseUrl: env.PAYMO_BASE_URL ?? 'https://app.paymoapp.com/api',
+    uploadDir: (env.PAYMO_UPLOAD_DIR ?? '').trim() || null,
     defaultProjectId: parseProjectId(env.PAYMO_DEFAULT_PROJECT_ID),
     permissionMode: mode,
     statusAliases: parseStatusAliases(env.PAYMO_STATUS_ALIASES),

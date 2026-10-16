@@ -71,6 +71,7 @@ test('loadConfig applies defaults around a bare api key', () => {
   assert.deepEqual(loadConfig({ PAYMO_API_KEY: 'k' }), {
     apiKey: 'k',
     baseUrl: 'https://app.paymoapp.com/api',
+    uploadDir: null,
     defaultProjectId: null,
     permissionMode: 'modify',
     statusAliases: {},
@@ -86,6 +87,7 @@ test('loadConfig reads every supported variable', () => {
     loadConfig({
       PAYMO_API_KEY: 'k',
       PAYMO_BASE_URL: 'https://example.test/api',
+      PAYMO_UPLOAD_DIR: ' /srv/uploads ',
       PAYMO_DEFAULT_PROJECT_ID: '1234',
       PAYMO_PERMISSION_MODE: 'readonly',
       PAYMO_STATUS_ALIASES: '{"wip":7}',
@@ -96,6 +98,7 @@ test('loadConfig reads every supported variable', () => {
     {
       apiKey: 'k',
       baseUrl: 'https://example.test/api',
+      uploadDir: '/srv/uploads',
       defaultProjectId: 1234,
       permissionMode: 'readonly',
       statusAliases: { wip: 7 },
