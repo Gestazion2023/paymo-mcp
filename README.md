@@ -66,12 +66,12 @@ guessing which variable won.
 | Toolset | Covers | Tools | Schema cost (chars) |
 |---|---|---|---|
 | `context` | `paymo_me`, `paymo_list_workflow_statuses` — who am I, what statuses exist | 2 | 1,008 |
-| `tasks` | tasks, tasklists (read), comments (read and write), file attachments, users (read), subtasks | 11 | 6,796 |
+| `tasks` | tasks, tasklists (read), comments (read and write), file attachments, users (read), subtasks | 14 | 6,796 |
 | `time` | time entries: timer control, manual logging, deletion | 4 | 876 |
 | `projects` | project CRUD, project templates, project statuses, tasklists (write) — milestones deferred | 9 | 5,794 |
 | `clients` | client CRUD (no delete), client contacts, company — portal access included | 8 | 6,136 |
 | `billing` | invoices, invoice payments, estimates, invoice templates — **read-only, deliberately** | 6 | 4,124 |
-| `all` | every toolset above | 38 | 23,134 |
+| `all` | every toolset above | 41 | 23,134 |
 
 `default` = `context` + `tasks` + `time`, which is approximately the surface the package exposed
 before toolsets existed — an existing user upgrading sees no change. Names are additive and
@@ -178,6 +178,7 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_list_tasks` | `project_id?: number`, `include_completed?: boolean`, `limit?`, `offset?`, `verbose?` | `GET /tasks?where=…` |
 | `paymo_get_task` | `task: string` (id or code), `verbose?` | `GET /tasks/{id}` |
 | `paymo_list_comments` | `task: string` (id or code), `limit?`, `offset?`, `verbose?` | `GET /comments?where=task_id=…` |
+| `paymo_list_subtasks` | `task: string` (id or code), `limit?`, `offset?`, `verbose?` | `GET /subtasks?where=task_id=…` |
 | `paymo_list_workflow_statuses` | `limit?`, `offset?`, `verbose?` | `GET /workflowstatuses` |
 | `paymo_list_users` | `active?: boolean` (default true), `limit?`, `offset?`, `verbose?` | `GET /users?where=active=…` |
 | `paymo_timer_status` | `verbose?` | `GET /entries?where=end_time=null and user_id={me}` |
@@ -203,6 +204,8 @@ Paymo account settings. Unless you need to create or mutate data, set `PAYMO_PER
 | `paymo_update_task` | `task` (req), plus any of `name`, `description`, `due_date`, `priority`, `users`, `complete`, `status` | `PUT /tasks/{id}` |
 | `paymo_add_comment` | `task` (req), `content` (req) | `POST /comments` |
 | `paymo_update_comment` | `comment_id` (req), `content` (req) | `PUT /comments/{id}` |
+| `paymo_create_subtask` | `task` (req, id or code), `name` (req) | `POST /subtasks` |
+| `paymo_update_subtask` | `subtask_id` (req), plus any of `name`, `complete` | `PUT /subtasks/{id}` |
 | `paymo_upload_file` | `task` (req), `path` (req, absolute local path inside `PAYMO_UPLOAD_DIR`, max 25 MiB) | `POST /files` (multipart) |
 | `paymo_start_timer` | `task` (req) | `POST /entries` |
 | `paymo_stop_timer` | — | `PUT /entries/{id}` |
@@ -297,6 +300,19 @@ company invoices. An Administrator key reads them. So those reads are **unverifi
 by stub-client unit tests instead; `paymo_list_invoice_payments` is readable and
 `paymo_get_estimate` reaches Paymo's estimate lookup. If these 403 for you, check the role of the
 key before suspecting the request.
+
+### Subtasks
+
+Subtasks are a resource of their own (`/subtasks`), not a root task with a parent: creating a task
+with a `parent_id` just makes another root task. `paymo_list_subtasks` filters by task (id or human
+code), `paymo_create_subtask` takes the `project_id` from the parent task (falling back to
+`PAYMO_DEFAULT_PROJECT_ID`) and `paymo_update_subtask` renames and/or completes one by `subtask_id`.
+There is no subtask delete tool. Paymo does not enforce a naming scheme; the `N. title` convention is
+yours to keep.
+
+The endpoint was verified by hand with `POST /subtasks` and `GET /subtasks?where=task_id=…`. The
+`subtask` field subset and the update tool are covered by stub-client unit tests and **not yet checked
+live** with `scripts/field-diff.mjs`.
 
 ### Comments
 

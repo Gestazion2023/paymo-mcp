@@ -500,3 +500,21 @@ test('uploadFile rejects files outside the upload directory, including via symli
     /outside the allowed|File not found/,
   );
 });
+
+test('subtask methods hit /subtasks, not /tasks, and unwrap the plural key', async () => {
+  const calls: Array<{ url: string; method?: string; body?: unknown }> = [];
+  const client = makeClient((url, init) => {
+    calls.push({ url, method: init?.method, body: init?.body });
+    return new Response('{"subtasks":[{"id":7}]}');
+  });
+
+  assert.deepEqual(await client.subtasks(123), [{ id: 7 }]);
+  assert.deepEqual(await client.createSubtask({ name: 'n', task_id: 123, project_id: 456 }), { id: 7 });
+  assert.deepEqual(await client.updateSubtask(7, { complete: true }), { id: 7 });
+
+  assert.match(calls[0]!.url, /\/subtasks\?where=task_id%3D123/);
+  assert.equal(calls[1]!.method, 'POST');
+  assert.match(calls[1]!.url, /\/subtasks$/);
+  assert.equal(calls[2]!.method, 'PUT');
+  assert.match(calls[2]!.url, /\/subtasks\/7$/);
+});

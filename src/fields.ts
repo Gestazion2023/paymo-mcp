@@ -13,6 +13,7 @@ export type RecordKind =
   | 'task'
   | 'taskSummary'
   | 'tasklist'
+  | 'subtask'
   | 'comment'
   | 'workflowstatus'
   | 'entry'
@@ -55,6 +56,9 @@ export const SUBSETS: Record<RecordKind, readonly string[]> = {
     'status_id', 'priority', 'due_date',
   ],
   tasklist: ['id', 'name', 'project_id', 'seq', 'milestone_id', 'tasks_count'],
+  // Subtasks have a listing only, so this doubles as the detail subset. It carries every field
+  // paymo_update_subtask accepts (`name`, `complete`) so the caller can read the value first.
+  subtask: ['id', 'name', 'task_id', 'project_id', 'complete', 'seq', 'created_on', 'updated_on'],
   // Comments only have a listing here (no detail read), so this doubles as the detail subset. It
   // keeps the whole conversation shape: who wrote it (`user_id`), when (`created_on`), the body,
   // and the threading (`thread_id`, `reply_id`) a reader needs to follow a reply chain.

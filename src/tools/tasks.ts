@@ -297,6 +297,77 @@ export const tasksTools: Record<string, ToolDef> = {
       }),
   },
 
+  paymo_list_subtasks: {
+    level: 'read',
+    description:
+      'List the subtasks of a Paymo task (id, name, complete). Subtask names follow the '
+      + '"N. title" convention.',
+    inputSchema: { task: taskIdentifier, limit, offset, verbose },
+    handler: (args: { task: string; limit: number; offset: number; verbose: boolean }, ctx) =>
+      respond('list subtasks', async () => {
+        const id = await ctx.client.resolveTaskId(args.task);
+        const records = await ctx.client.subtasks(id);
+        const filtered = records.map((record) => filterRecord(record, 'subtask', args.verbose));
+
+        return paginate(filtered, args.limit, args.offset);
+      }),
+  },
+
+  paymo_create_subtask: {
+    level: 'write',
+    description:
+      'Create a subtask under a Paymo task. The project is taken from the task, falling back '
+      + 'to the configured default project.',
+    inputSchema: {
+      task: taskIdentifier,
+      name: z.string().max(255).describe('Subtask title, e.g. "1. Write the migration".'),
+    },
+    handler: (args: { task: string; name: string }, ctx) =>
+      respond('create subtask', async () => {
+        const id = await ctx.client.resolveTaskId(args.task);
+        const parent = await ctx.client.task(id);
+        const project = parent.project_id ?? ctx.defaultProjectId;
+
+        if (project === null || project === undefined) {
+          throw new Error('The task has no project_id and no PAYMO_DEFAULT_PROJECT_ID is configured.');
+        }
+
+        return ctx.client.createSubtask({ name: args.name, task_id: id, project_id: project });
+      }),
+  },
+
+  paymo_update_subtask: {
+    level: 'write',
+    description:
+      'Rename a subtask and/or mark it complete (true) or reopen it (false). Get the '
+      + 'subtask_id from paymo_list_subtasks.',
+    inputSchema: {
+      subtask_id: z.number().int().describe('Paymo subtask id, as returned by paymo_list_subtasks.'),
+      name: z.string().max(255).optional().describe('New title.'),
+      complete: z.boolean().optional().describe('Mark complete (true) or reopen (false).'),
+    },
+    handler: (args: { subtask_id: number; name?: string; complete?: boolean }, ctx) => {
+      const payload: PaymoRecord = {};
+
+      for (const key of ['name', 'complete'] as const) {
+        const value = args[key];
+
+        if (value !== undefined) {
+          payload[key] = value;
+        }
+      }
+
+      if (Object.keys(payload).length === 0) {
+        return {
+          content: [{ type: 'text', text: 'Pass name and/or complete to update a subtask.' }],
+          isError: true,
+        };
+      }
+
+      return respond('update subtask', () => ctx.client.updateSubtask(args.subtask_id, payload));
+    },
+  },
+
   paymo_update_comment: {
     level: 'write',
     description:

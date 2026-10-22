@@ -1,6 +1,6 @@
 {
   "name": "paymo-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Unofficial MCP server for the Paymo time-tracking API",
   "license": "MIT",
   "author": "Gestazión <developers@gestazion.com>",

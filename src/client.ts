@@ -325,6 +325,22 @@ export class PaymoClient {
     return this.list('comments', 'comments', `task_id=${taskId}`);
   }
 
+  /**
+   * Subtasks live under `/subtasks`, not under `/tasks` with a parent: a task created with a
+   * `parent_id` is just another root task. Verified by hand against the real API.
+   */
+  async subtasks(taskId: number): Promise<PaymoRecord[]> {
+    return this.list('subtasks', 'subtasks', `task_id=${taskId}`);
+  }
+
+  async createSubtask(data: PaymoRecord): Promise<PaymoRecord> {
+    return this.create('subtasks', 'subtasks', data);
+  }
+
+  async updateSubtask(id: number, data: PaymoRecord): Promise<PaymoRecord> {
+    return this.update('subtasks', 'subtasks', id, data);
+  }
+
   async startEntry(taskId: number): Promise<PaymoRecord> {
     const payload = await this.request('POST', '/entries', {
       body: {

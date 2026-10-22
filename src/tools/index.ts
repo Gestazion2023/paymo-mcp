@@ -32,6 +32,7 @@ export const TOOLSETS: Record<string, string[]> = {
     'paymo_list_comments', 'paymo_list_users',
     'paymo_create_task', 'paymo_update_task', 'paymo_add_comment', 'paymo_update_comment',
     'paymo_upload_file',
+    'paymo_list_subtasks', 'paymo_create_subtask', 'paymo_update_subtask',
   ],
   time: ['paymo_timer_status', 'paymo_start_timer', 'paymo_stop_timer', 'paymo_delete_entry'],
   projects: [

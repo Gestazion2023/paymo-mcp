@@ -122,20 +122,20 @@ test('start_timer reports no previous entry when nothing was running', async () 
   assert.deepEqual(payloadOf(result), { started: { id: 2, task_id: 1234 }, previous_closed: null });
 });
 
-test('read-only mode registers the read tools only; full registers all 38', () => {
+test('read-only mode registers the read tools only; full registers all 41', () => {
   const readOnly = handlersFor({}, { permissionMode: 'readonly' });
   const full = handlersFor({}, { permissionMode: 'full' });
 
-  assert.equal(readOnly.size, 22);
-  assert.equal(full.size, 38);
+  assert.equal(readOnly.size, 23);
+  assert.equal(full.size, 41);
   assert.equal(readOnly.has('paymo_update_task'), false);
   assert.equal(readOnly.has('paymo_delete_entry'), false);
 });
 
-test('default mode registers 37 of 38 tools, everything except paymo_delete_entry', () => {
+test('default mode registers 40 of 41 tools, everything except paymo_delete_entry', () => {
   const handlers = handlersFor({});
 
-  assert.equal(handlers.size, 37);
+  assert.equal(handlers.size, 40);
   assert.equal(handlers.has('paymo_delete_entry'), false);
   assert.equal(handlers.has('paymo_stop_timer'), true);
   assert.equal(handlers.has('paymo_create_task'), true);
@@ -357,6 +357,81 @@ test('the comment tools split across the permission gate: list is a read, update
   assert.equal(modify.has('paymo_update_comment'), true);
 });
 
+test('list_subtasks resolves the task code, applies the subset and honors limit and offset', async () => {
+  let listed: number | undefined;
+  const handlers = handlersFor({
+    resolveTaskId: async () => 1234,
+    subtasks: async (taskId) => {
+      listed = taskId;
+      return [
+        { id: 1, name: '1. First', task_id: 1234, complete: false, extra: 'x' },
+        { id: 2, name: '2. Second', task_id: 1234, complete: true, extra: 'x' },
+      ];
+    },
+  });
+
+  const result = await handlers.get('paymo_list_subtasks')!({ task: 'ABC-1', limit: 1, offset: 1 });
+
+  assert.equal(listed, 1234);
+  assert.deepEqual(payloadOf(result), [{ id: 2, name: '2. Second', task_id: 1234, complete: true }]);
+});
+
+test('create_subtask takes the project from the parent task', async () => {
+  let created: Record<string, unknown> = {};
+  const handlers = handlersFor({
+    resolveTaskId: async () => 1234,
+    task: async () => ({ id: 1234, project_id: 5678 }),
+    createSubtask: async (data) => {
+      created = data;
+      return { id: 9, ...data };
+    },
+  });
+
+  const result = await handlers.get('paymo_create_subtask')!({ task: 'ABC-1', name: '1. First' });
+
+  assert.deepEqual(created, { name: '1. First', task_id: 1234, project_id: 5678 });
+  assert.deepEqual(payloadOf(result), { id: 9, name: '1. First', task_id: 1234, project_id: 5678 });
+});
+
+test('create_subtask reports an error when the task carries no project and there is no default', async () => {
+  const handlers = handlersFor({
+    resolveTaskId: async () => 1234,
+    task: async () => ({ id: 1234 }),
+  });
+
+  const result = await handlers.get('paymo_create_subtask')!({ task: '1234', name: '1. First' });
+
+  assert.equal(result.isError, true);
+});
+
+test('update_subtask forwards only the fields given and rejects an empty update', async () => {
+  const calls: Array<{ id: number; data: Record<string, unknown> }> = [];
+  const handlers = handlersFor({
+    updateSubtask: async (id, data) => {
+      calls.push({ id, data });
+      return { id, ...data };
+    },
+  });
+
+  const done = await handlers.get('paymo_update_subtask')!({ subtask_id: 7, complete: true });
+  const empty = await handlers.get('paymo_update_subtask')!({ subtask_id: 7 });
+
+  assert.deepEqual(calls, [{ id: 7, data: { complete: true } }]);
+  assert.deepEqual(payloadOf(done), { id: 7, complete: true });
+  assert.equal(empty.isError, true);
+});
+
+test('the subtask tools split across the permission gate: list is a read, create and update are writes', () => {
+  const readOnly = handlersFor({}, { permissionMode: 'readonly' });
+  const modify = handlersFor({}, { permissionMode: 'modify' });
+
+  assert.equal(readOnly.has('paymo_list_subtasks'), true);
+  assert.equal(readOnly.has('paymo_create_subtask'), false);
+  assert.equal(readOnly.has('paymo_update_subtask'), false);
+  assert.equal(modify.has('paymo_create_subtask'), true);
+  assert.equal(modify.has('paymo_update_subtask'), true);
+});
+
 test('timer_status filters the running entry to the documented subset', async () => {
   const handlers = handlersFor({
     currentUserId: async () => 9,
@@ -402,7 +477,7 @@ test('list tools cap the response at 50 records unless a larger limit is asked f
 test('empty toolset selection resolves to the default toolsets (context, tasks, time)', () => {
   const names = resolve({ mode: 'full' });
 
-  assert.equal(names.size, 17);
+  assert.equal(names.size, 20);
   assert.equal(names.has('paymo_me'), true);
   assert.equal(names.has('paymo_create_task'), true);
   assert.equal(names.has('paymo_delete_entry'), true);
@@ -411,7 +486,7 @@ test('empty toolset selection resolves to the default toolsets (context, tasks, 
 test('the all keyword expands to every toolset', () => {
   const names = resolve({ toolsets: ['all'], mode: 'full' });
 
-  assert.equal(names.size, 38);
+  assert.equal(names.size, 41);
   assert.equal(names.has('paymo_create_project'), true);
   assert.equal(names.has('paymo_list_clients'), true);
   assert.equal(names.has('paymo_list_invoices'), true);
@@ -420,7 +495,7 @@ test('the all keyword expands to every toolset', () => {
 test('default is a keyword, so default,<toolset> adds instead of replacing', () => {
   const names = resolve({ toolsets: ['default', 'context'], mode: 'full' });
 
-  assert.equal(names.size, 17);
+  assert.equal(names.size, 20);
 });
 
 test('toolset names are additive, case-insensitive and whitespace-tolerant', () => {
@@ -463,7 +538,7 @@ test('the deny regex subtracts last, even a tool explicitly named in PAYMO_TOOLS
   });
 
   assert.equal(names.has('paymo_create_task'), false);
-  assert.equal(names.size, 33);
+  assert.equal(names.size, 35);
 });
 
 test('permission mode wins over every explicit selection', () => {
